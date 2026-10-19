@@ -1,0 +1,17 @@
+node_modules/
+dist/
+.venv/
+__pycache__/
+.pytest_cache/
+*.db
+.env
+.packages/
+# Local configuration, credentials and runtime files
+.env.*
+!.env.example
+*.db-*
+*.sqlite*
+*.log
+.coverage
+htmlcov/
+.DS_Store
