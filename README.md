@@ -125,3 +125,9 @@ python backup.py restore --file ../.backups/patikitap-TARIH.json
 20 Ekim kontrolünde Supabase yönetim bağlantısı çalışırken bu bilgisayardan pooler 5432 ve 6543 portlarına TCP bağlantısı reddedildi. Bu yüzden yeni runtime hesabının doğrudan oturum açması ve gerçek üyeli fotoğraf yükleme bu ağda doğrulanamadı; migration ve yetkiler yönetim bağlantısı üzerinden kontrol edildi. `/api/health` süreç kontrolüdür; `/api/ready` veritabanı erişimini de denetler. Canlı pilot öncesi readiness başarılı olmalıdır.
 
 İlk yönetici için kullanıcı tarafından bir e-posta adresi seçildi; Supabase'de doğrulanmış üyelik kaydı oluşmadan yönetici yetkisi verilmez. Hesap doğrulandıktan sonra yerel yönetim aracıyla bu hesaba atanır.
+
+### Son doğrulama
+
+GitHub Actions çalışması `39432552431` başarılı tamamlandı: SQLite backend, PostgreSQL backend (eşzamanlı kabul testi dahil) ve frontend kontrolleri yeşil. Yerelde 25 backend testi ve 3 frontend testi geçti; yalnızca PostgreSQL'e özgü tek test SQLite koşusunda atlandı. Frontend üretim derlemesi başarılı. npm güvenlik taraması ve OSV üzerinden 33 sabit Python bağımlılığı kontrolünde bilinen açık bulunmadı.
+
+Kullanıcının açık onayıyla Supabase yönetim bağlantısından tek sorguda uygulama verisi anlık görüntüsü alındı; `.backups/patikitap-20261020.json` dosyasına kaydedildi. 6 kayıtlı bu yedek doğrulandı ve izole, geçici SQLite hedefinde geri yükleme denenerek 6 kitabın korunduğu kontrol edildi. Yedek ve bütün `.env` dosyaları GitHub kapsamı dışındadır.
