@@ -46,7 +46,7 @@ Bu bilgisayarda Python bağımlılıkları `backend/.packages` içindedir. Yeni 
 
 Supabase Dashboard → Authentication → URL Configuration bölümünde Site URL ve izin verilen redirect adreslerinin yerel geliştirme için `http://127.0.0.1:5173` ile uyumlu olduğunu kontrol edin. Dağıtımda kendi HTTPS alan adınızı kullanın. Varsayılan Supabase e-posta gönderim kısıtları geçerlidir; e-posta/SMTP ayarları bu değişiklikte değiştirilmedi.
 
-PostgreSQL'de şema başlangıçta otomatik değiştirilmez; migration uygulanmalıdır. SQLite sadece izole geliştirme/test için desteklenir; eski prototip SQLite dosyası otomatik taşınmaz, yeni bir dosya seçilmelidir. Gerçek Supabase verisine test verisi yazılmaz.
+PostgreSQL'de şema başlangıçta otomatik değiştirilmez; migration uygulanmalıdır. Uygulama için PostgreSQL DATABASE_URL zorunludur; bağlantı yokken SQLite’a geçilmez. SQLite yalnızca izole otomatik testlerin bellek içi veritabanıdır. Gerçek Supabase verisine test verisi yazılmaz.
 
 ## Yetkiler
 
@@ -131,3 +131,7 @@ python backup.py restore --file ../.backups/patikitap-TARIH.json
 GitHub Actions çalışması `39432552431` başarılı tamamlandı: SQLite backend, PostgreSQL backend (eşzamanlı kabul testi dahil) ve frontend kontrolleri yeşil. Yerelde 25 backend testi ve 3 frontend testi geçti; yalnızca PostgreSQL'e özgü tek test SQLite koşusunda atlandı. Frontend üretim derlemesi başarılı. npm güvenlik taraması ve OSV üzerinden 33 sabit Python bağımlılığı kontrolünde bilinen açık bulunmadı.
 
 Kullanıcının açık onayıyla Supabase yönetim bağlantısından tek sorguda uygulama verisi anlık görüntüsü alındı; `.backups/patikitap-20261020.json` dosyasına kaydedildi. 6 kayıtlı bu yedek doğrulandı ve izole, geçici SQLite hedefinde geri yükleme denenerek 6 kitabın korunduğu kontrol edildi. Yedek ve bütün `.env` dosyaları GitHub kapsamı dışındadır.
+
+### Bağlantı yeniden doğrulandı
+
+20 Ekim sonraki kontrolde doğrudan Supabase bağlantısı yeniden başarılı oldu. `patikitap_runtime` hesabıyla 6 kitap okundu; DATABASE_URL bu doğrulanmış sınırlı hesaba ayarlandı. Önceki ağ hatasının kesin kaynağı belirlenemedi. Uygulamanın otomatik SQLite geçişi tamamen kaldırıldı: DATABASE_URL eksik veya PostgreSQL dışında olduğunda uygulama hata verir. SQLite yalnızca açıkça kurulan izole otomatik testlerde kullanılır. Rolün parola ve izin yönetimi Supabase yönetim kanalıyla yapılır; uygulama hesabına rol yönetim yetkisi verilmez.

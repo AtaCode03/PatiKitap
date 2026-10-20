@@ -9,10 +9,13 @@ ROOT = Path(__file__).resolve().parent
 load_dotenv(ROOT / '.env', override=False, encoding='utf-8-sig')
 
 def build_engine(connection_string=None):
-    raw = connection_string or os.getenv('DATABASE_URL') or f"sqlite:///{(ROOT / 'patikitap.db').as_posix()}"
+    raw = connection_string or os.getenv('DATABASE_URL')
+    if not raw:raise ValueError('DATABASE_URL zorunlu; uygulama yalnızca PostgreSQL kullanır.')
     if os.getenv('APP_ENV')=='production' and not (connection_string or os.getenv('DATABASE_URL')):
         raise ValueError('Production ortamında DATABASE_URL zorunlu.')
     url = make_url(raw)
+    if connection_string is None and url.get_backend_name() not in ('postgres','postgresql'):
+        raise ValueError('Uygulama bağlantısı PostgreSQL olmalı; SQLite yalnızca izole testler içindir.')
     options = {'pool_pre_ping': True, 'hide_parameters': True}
     if url.get_backend_name() in ('postgres', 'postgresql'):
         url = url.set(drivername='postgresql+psycopg')
