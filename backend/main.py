@@ -1,12 +1,18 @@
 """PatiKitap business API. All mutations use a verified Supabase identity."""
 from contextlib import asynccontextmanager
 from typing import Annotated
-from uuid import uuid4
+from uuid import uuid4, UUID
 from io import BytesIO
 import csv
+import re
+from starlette.concurrency import run_in_threadpool
 import httpx
 from fastapi import FastAPI, Depends, HTTPException, Query, Request as HttpRequest, Response
 from fastapi.responses import JSONResponse
+from operations import OperationalMiddleware
+import logging
+from fastapi.staticfiles import StaticFiles
+from pathlib import Path
 from sqlalchemy import select, text, func, or_, inspect
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
@@ -27,7 +33,9 @@ async def lifespan(app):
             raise RuntimeError('Eski SQLite şeması. Supabase bağlantısını kullanın veya yeni bir SQLite dosyası seçin.')
         Base.metadata.create_all(engine)
     yield
-app = FastAPI(title='PatiKitap API', version='0.2.0', lifespan=lifespan)
+app = FastAPI(title='PatiKitap API', version='0.3.0', lifespan=lifespan)
+app.add_middleware(OperationalMiddleware,supabase_url=SUPABASE_URL)
+logging.getLogger('patikitap.http').setLevel(logging.INFO)
 
 @app.exception_handler(IntegrityError)
 async def conflict_handler(request, exc):
@@ -88,7 +96,7 @@ def lock_tx(session,tid):
     return tx,books
 
 def image_check(url,user):
-    if url and not url.startswith(f'book-media/{user.id}/'):
+    if url and not re.fullmatch(r'book-media/'+re.escape(user.id)+r'/[0-9a-f]{32}\.jpg',url):
         raise HTTPException(422,'Yalnızca kendi yüklediğin kitap fotoğraflarını kullanabilirsin.')
 
 def cancel_transaction(session,tx,books,user,reason):
@@ -103,7 +111,7 @@ def cancel_transaction(session,tx,books,user,reason):
     for uid in (tx.owner_id,tx.requester_id): notify(session,uid,'İşlem iptal edildi; kitaplar yeniden paylaşıma açıldı.',tx.id)
 
 @app.get('/api/health')
-def health(): return {'status':'ok','mode':'prototype','version':'0.2.0'}
+def health(): return {'status':'ok','mode':'prototype','version':'0.3.0'}
 @app.get('/api/health/database')
 def database_health(session: DB):
     session.execute(text('SELECT 1'))
@@ -126,8 +134,8 @@ def list_books(session: DB, q: str='', category: str='', kind: str='', offset: i
     if kind: statement=statement.where(Book.kind==kind)
     return [record(b) for b in session.scalars(statement.order_by(Book.id.desc()).offset(offset).limit(limit))]
 @app.get('/api/me/books')
-def own_books(session: DB,user: USER):
-    return [record(b) for b in session.scalars(select(Book).where(Book.owner_id==user.id).order_by(Book.id.desc()).limit(200))]
+def own_books(session: DB,user: USER, offset:int=Query(0,ge=0), limit:int=Query(100,ge=1,le=200)):
+    return [record(b) for b in session.scalars(select(Book).where(Book.owner_id==user.id).order_by(Book.id.desc()).offset(offset).limit(limit))]
 @app.post('/api/books',status_code=201)
 def create_book(data: BookInput,session: DB,user: USER):
     image_check(data.image_url,user)
@@ -140,7 +148,7 @@ def update_book(bid:int,data:BookInput,session:DB,user:USER):
     if not book: raise HTTPException(404,'Kitap bulunamadı.')
     if book.owner_id!=user.id: raise HTTPException(403,'Bu ilan sana ait değil.')
     if book.status!='active': raise HTTPException(409,'Yalnızca aktif ilan düzenlenebilir.')
-    if session.scalar(select(Request.id).where(Request.book_id==bid,Request.status=='pending').limit(1)):
+    if session.scalar(select(Request.id).where(or_(Request.book_id==bid,Request.offered_book_id==bid),Request.status=='pending').limit(1)):
         raise HTTPException(409,'Bekleyen talepleri sonuçlandırdıktan sonra ilanı düzenleyebilirsin.')
     image_check(data.image_url,user)
     for key,value in data.model_dump().items(): setattr(book,key,value)
@@ -157,13 +165,7 @@ def archive_book(bid:int,session:DB,user:USER):
         req.status='rejected';notify(session,req.requester_id,'İlgili kitap arşivlendiği için talebin kapatıldı.')
     audit(session,user,'book.archived',book)
     return {'status':'archived'}
-@app.post('/api/uploads/image',status_code=201)
-async def upload_image(request:HttpRequest,user:USER):
-    # Stream with a hard bound; never buffer an unbounded request body.
-    content=bytearray()
-    async for chunk in request.stream():
-        content.extend(chunk)
-        if len(content)>5*1024*1024: raise HTTPException(413,'En fazla 5 MB fotoğraf yükleyebilirsin.')
+def normalize_image(content):
     try:
         with Image.open(BytesIO(content)) as im:
             if im.format not in ('JPEG','PNG','WEBP') or im.width*im.height>20000000: raise ValueError()
@@ -171,10 +173,20 @@ async def upload_image(request:HttpRequest,user:USER):
             output=BytesIO();im.save(output,'JPEG',quality=85)
     except (UnidentifiedImageError,ValueError,OSError,Image.DecompressionBombError):
         raise HTTPException(422,'Geçerli bir JPEG, PNG veya WebP fotoğraf seç.') from None
+    return output.getvalue()
+
+@app.post('/api/uploads/image',status_code=201)
+async def upload_image(request:HttpRequest,user:USER):
+    # Stream with a hard bound; never buffer an unbounded request body.
+    content=bytearray()
+    async for chunk in request.stream():
+        content.extend(chunk)
+        if len(content)>5*1024*1024: raise HTTPException(413,'En fazla 5 MB fotoğraf yükleyebilirsin.')
+    image_bytes=await run_in_threadpool(normalize_image,bytes(content))
     path=f'{user.id}/{uuid4().hex}.jpg'
     try:
         async with httpx.AsyncClient(timeout=30) as client:
-            response=await client.post(f'{SUPABASE_URL}/storage/v1/object/book-media/{path}',headers={'apikey':SUPABASE_KEY,'Authorization':f'Bearer {user.token}','Content-Type':'image/jpeg'},content=output.getvalue())
+            response=await client.post(f'{SUPABASE_URL}/storage/v1/object/book-media/{path}',headers={'apikey':SUPABASE_KEY,'Authorization':f'Bearer {user.token}','Content-Type':'image/jpeg'},content=image_bytes)
         if response.status_code not in (200,201): raise HTTPException(502,'Fotoğraf kaydedilemedi. Yeniden giriş yapıp dene.')
     except httpx.RequestError: raise HTTPException(503,'Fotoğraf servisine ulaşılamadı.') from None
     return {'url':f'book-media/{path}'}
@@ -198,6 +210,7 @@ def create_request(bid:int,data:RequestInput,session:DB,user:USER):
     if not book: raise HTTPException(404,'Kitap bulunamadı.')
     if book.is_demo or not book.owner_id: raise HTTPException(409,'Örnek ilanlar talep edilemez. Gerçek bir kullanıcı ilanı seç.')
     if book.owner_id==user.id: raise HTTPException(409,'Kendi kitabını talep edemezsin.')
+    if get(session,Profile,book.owner_id).disabled: raise HTTPException(409,'İlan sahibi şu anda işlem yapamıyor.')
     if book.status!='active': raise HTTPException(409,'Kitap artık paylaşıma açık değil.')
     if book.kind=='Takas':
         offered=books.get(data.offered_book_id)
@@ -210,10 +223,12 @@ def create_request(bid:int,data:RequestInput,session:DB,user:USER):
     notify(session,book.owner_id,f'“{book.title}” için yeni bir talep var.');audit(session,user,'request.created',row)
     return record(row)
 @app.get('/api/me/requests')
-def requests(session:DB,user:USER):
-    rows=session.scalars(select(Request).join(Book,Book.id==Request.book_id).where(or_(Request.requester_id==user.id,Book.owner_id==user.id)).order_by(Request.id.desc()).limit(200))
-    return [{**record(r),'book_title':get(session,Book,r.book_id).title,'owner_id':get(session,Book,r.book_id).owner_id,
-             'offered_title':get(session,Book,r.offered_book_id).title if r.offered_book_id else None} for r in rows]
+def requests(session:DB,user:USER, offset:int=Query(0,ge=0), limit:int=Query(100,ge=1,le=200)):
+    from sqlalchemy.orm import aliased
+    offered=aliased(Book)
+    rows=session.execute(select(Request,Book.title,Book.owner_id,offered.title).join(Book,Book.id==Request.book_id).outerjoin(offered,offered.id==Request.offered_book_id).where(or_(Request.requester_id==user.id,Book.owner_id==user.id)).order_by(Request.id.desc()).offset(offset).limit(limit))
+    return [{**record(r),'book_title':title,'owner_id':owner,'offered_title':other} for r,title,owner,other in rows]
+
 @app.post('/api/requests/{rid}/action')
 def request_action(rid:int,data:RequestAction,session:DB,user:USER):
     row=get(session,Request,rid);ids=[row.book_id]+([row.offered_book_id] if row.offered_book_id else [])
@@ -228,6 +243,7 @@ def request_action(rid:int,data:RequestAction,session:DB,user:USER):
             row.status='rejected';notify(session,row.requester_id,f'“{book.title}” talebin kabul edilmedi.')
         else:
             if book.status!='active': raise HTTPException(409,'Kitap artık uygun değil.')
+            if get(session,Profile,row.requester_id).disabled: raise HTTPException(409,'Talep sahibi şu anda işlem yapamıyor.')
             if row.offered_book_id:
                 offered=books[row.offered_book_id]
                 if offered.status!='active' or offered.owner_id!=row.requester_id or offered.kind!='Takas': raise HTTPException(409,'Teklif edilen kitap artık uygun değil.')
@@ -245,10 +261,13 @@ def request_action(rid:int,data:RequestAction,session:DB,user:USER):
     audit(session,user,f'request.{row.status}',row)
     return record(row)
 @app.get('/api/me/transactions')
-def transactions(session:DB,user:USER):
-    rows=session.scalars(select(Transaction).where(or_(Transaction.owner_id==user.id,Transaction.requester_id==user.id)).order_by(Transaction.id.desc()).limit(200))
-    return [{**record(t),'book_title':get(session,Book,t.book_id).title,
-        'deliveries':[record(d) for d in session.scalars(select(Delivery).where(Delivery.transaction_id==t.id))]} for t in rows]
+def transactions(session:DB,user:USER, offset:int=Query(0,ge=0), limit:int=Query(100,ge=1,le=200)):
+    rows=session.execute(select(Transaction,Book.title).join(Book,Book.id==Transaction.book_id).where(or_(Transaction.owner_id==user.id,Transaction.requester_id==user.id)).order_by(Transaction.id.desc()).offset(offset).limit(limit)).all()
+    deliveries={t.id:[] for t,_ in rows}
+    if deliveries:
+        for d in session.scalars(select(Delivery).where(Delivery.transaction_id.in_(deliveries))):deliveries[d.transaction_id].append(record(d))
+    return [{**record(t),'book_title':title,'deliveries':deliveries[t.id]} for t,title in rows]
+
 @app.patch('/api/deliveries/{did}')
 def dispatch(did:int,data:DeliveryInput,session:DB,user:USER):
     delivery=get(session,Delivery,did);tx,_=lock_tx(session,delivery.transaction_id);session.refresh(delivery)
@@ -288,8 +307,8 @@ def cancel(tid:int,session:DB,user:USER):
     cancel_transaction(session,tx,books,user,'Katılımcı iptali')
     return record(tx)
 @app.get('/api/me/notifications')
-def notifications(session:DB,user:USER):
-    return [record(n) for n in session.scalars(select(Notification).where(Notification.user_id==user.id).order_by(Notification.id.desc()).limit(100))]
+def notifications(session:DB,user:USER, offset:int=Query(0,ge=0), limit:int=Query(100,ge=1,le=200)):
+    return [record(n) for n in session.scalars(select(Notification).where(Notification.user_id==user.id).order_by(Notification.id.desc()).offset(offset).limit(limit))]
 @app.post('/api/me/notifications/{nid}/read')
 def read_notification(nid:int,session:DB,user:USER):
     n=get(session,Notification,nid)
@@ -307,8 +326,8 @@ def complain(data:ComplaintInput,session:DB,user:USER):
     row=Complaint(reporter_id=user.id,**data.model_dump());session.add(row);session.flush();audit(session,user,'complaint.created',row)
     return record(row)
 @app.get('/api/me/complaints')
-def my_complaints(session:DB,user:USER):
-    return [record(r) for r in session.scalars(select(Complaint).where(Complaint.reporter_id==user.id).order_by(Complaint.id.desc()).limit(100))]
+def my_complaints(session:DB,user:USER, offset:int=Query(0,ge=0), limit:int=Query(100,ge=1,le=200)):
+    return [record(r) for r in session.scalars(select(Complaint).where(Complaint.reporter_id==user.id).order_by(Complaint.id.desc()).offset(offset).limit(limit))]
 
 def impact_data(session):
     return {'mode':'simulation','support_rate':0.2,'completed_transactions':session.scalar(select(func.count()).select_from(Transaction).where(Transaction.status=='completed')),
@@ -319,16 +338,16 @@ def impact_data(session):
 @app.get('/api/impact')
 def impact(session:DB): return impact_data(session)
 @app.get('/api/support')
-def support(session:DB):
+def support(session:DB, offset:int=Query(0,ge=0), limit:int=Query(100,ge=1,le=200)):
     # Public report deliberately omits transaction IDs and participant information.
-    return [{'id':s.id,'amount_cents':s.amount_cents,'mode':s.mode,'status':s.status,'organization':s.organization,'note':s.note,'created_at':s.created_at} for s in session.scalars(select(SupportRecord).order_by(SupportRecord.id.desc()).limit(200))]
+    return [{'id':s.id,'amount_cents':s.amount_cents,'mode':s.mode,'status':s.status,'organization':s.organization,'note':s.note,'created_at':s.created_at} for s in session.scalars(select(SupportRecord).order_by(SupportRecord.id.desc()).offset(offset).limit(limit))]
 @app.get('/api/admin/overview')
 def overview(session:DB,user:ADMIN):
     return {**impact_data(session),'open_complaints':session.scalar(select(func.count()).select_from(Complaint).where(Complaint.status=='open')),
         'pending_requests':session.scalar(select(func.count()).select_from(Request).where(Request.status=='pending'))}
 @app.get('/api/admin/complaints')
-def complaints(session:DB,user:ADMIN):
-    return [record(r) for r in session.scalars(select(Complaint).order_by(Complaint.id.desc()).limit(200))]
+def complaints(session:DB,user:ADMIN, offset:int=Query(0,ge=0), limit:int=Query(100,ge=1,le=200)):
+    return [record(r) for r in session.scalars(select(Complaint).order_by(Complaint.id.desc()).offset(offset).limit(limit))]
 @app.post('/api/admin/complaints/{cid}/resolve')
 def resolve(cid:int,data:ResolutionInput,session:DB,user:ADMIN):
     row=get(session,Complaint,cid)
@@ -350,8 +369,8 @@ def resolve(cid:int,data:ResolutionInput,session:DB,user:ADMIN):
     audit(session,user,'complaint.resolved',row,data.resolution)
     return record(row)
 @app.get('/api/admin/books')
-def admin_books(session:DB,user:ADMIN):
-    return [record(b) for b in session.scalars(select(Book).order_by(Book.id.desc()).limit(200))]
+def admin_books(session:DB,user:ADMIN, offset:int=Query(0,ge=0), limit:int=Query(100,ge=1,le=200)):
+    return [record(b) for b in session.scalars(select(Book).order_by(Book.id.desc()).offset(offset).limit(limit))]
 @app.post('/api/admin/books/{bid}/moderate')
 def moderate(bid:int,data:ModerateInput,session:DB,user:ADMIN):
     b=lock_books(session,[bid]).get(bid)
@@ -364,8 +383,8 @@ def moderate(bid:int,data:ModerateInput,session:DB,user:ADMIN):
     if b.owner_id: notify(session,b.owner_id,f'İlan durumu güncellendi: {data.reason}')
     audit(session,user,'book.moderated',b,data.reason);return record(b)
 @app.get('/api/admin/support')
-def admin_support(session:DB,user:ADMIN):
-    return [record(s) for s in session.scalars(select(SupportRecord).order_by(SupportRecord.id.desc()).limit(200))]
+def admin_support(session:DB,user:ADMIN, offset:int=Query(0,ge=0), limit:int=Query(100,ge=1,le=200)):
+    return [record(s) for s in session.scalars(select(SupportRecord).order_by(SupportRecord.id.desc()).offset(offset).limit(limit))]
 @app.patch('/api/admin/support/{sid}')
 def update_support(sid:int,data:SupportInput,session:DB,user:ADMIN):
     s=get(session,SupportRecord,sid)
@@ -373,8 +392,8 @@ def update_support(sid:int,data:SupportInput,session:DB,user:ADMIN):
     for k,v in data.model_dump().items(): setattr(s,k,v)
     s.status='documented';audit(session,user,'support.documented',s,'Simülasyon belgesi');return record(s)
 @app.get('/api/admin/audit')
-def audit_log(session:DB,user:ADMIN):
-    return [record(a) for a in session.scalars(select(AuditLog).order_by(AuditLog.id.desc()).limit(200))]
+def audit_log(session:DB,user:ADMIN, offset:int=Query(0,ge=0), limit:int=Query(100,ge=1,le=200)):
+    return [record(a) for a in session.scalars(select(AuditLog).order_by(AuditLog.id.desc()).offset(offset).limit(limit))]
 @app.get('/api/admin/reports.csv')
 def report(session:DB,user:ADMIN):
     import io
@@ -383,11 +402,22 @@ def report(session:DB,user:ADMIN):
     return Response('\ufeff'+out.getvalue(),media_type='text/csv; charset=utf-8',headers={'Content-Disposition':'attachment; filename=patikitap-etki.csv'})
 
 @app.get('/api/admin/users')
-def admin_users(session:DB,user:ADMIN):
-    return [record(p) for p in session.scalars(select(Profile).order_by(Profile.created_at.desc()).limit(200))]
+def admin_users(session:DB,user:ADMIN, offset:int=Query(0,ge=0), limit:int=Query(100,ge=1,le=200)):
+    return [record(p) for p in session.scalars(select(Profile).order_by(Profile.created_at.desc()).offset(offset).limit(limit))]
 @app.patch('/api/admin/users/{uid}')
-def set_user_state(uid:__import__('uuid').UUID,data:UserStateInput,session:DB,user:ADMIN):
+def set_user_state(uid:UUID,data:UserStateInput,session:DB,user:ADMIN):
     if str(uid)==user.id: raise HTTPException(409,'Kendi hesabını bu ekrandan kapatamazsın.')
     profile=get(session,Profile,str(uid));profile.disabled=data.disabled
     audit(session,user,'profile.disabled' if data.disabled else 'profile.enabled',profile,data.reason)
     return record(profile)
+
+@app.get('/api/ready')
+def readiness(session:DB):
+    for table in Base.metadata.sorted_tables:
+        session.execute(select(table).limit(0))
+    return {'status':'ready'}
+
+# A built React application can be served from the same origin in production.
+DIST=Path(__file__).resolve().parent.parent/'frontend'/'dist'
+if DIST.is_dir():
+    app.mount('/',StaticFiles(directory=str(DIST),html=True),name='frontend')

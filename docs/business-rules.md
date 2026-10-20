@@ -37,3 +37,7 @@
 ## Doğrulama kapsamı
 
 İzole yerel testler: üyelik zorunluluğu, sahiplik/IDOR, rol yükseltme engeli, talep tekilliği, rakip talebin kapanması, bağış/satış/takas akışı, iki yönlü takas teslimatı, iptal, ihtilaf ve yönetici kararı, tekil destek kaydı, favoriler, bildirim gizliliği, moderasyon, hesap kapatma/açma ve oturum servisi hatasında erişimin reddi.
+
+## İlave sağlamlaştırma
+
+Kapalı hesapların ilanlarına yeni talep açılamaz ve kapalı talep sahibinin talebi kabul edilmez. Bekleyen takas teklifi olan kitap düzenlenemez. DB çalışma rolü, yabancı anahtar indeksleri, sayfalama, güvenli fotoğraf referansları ve istek korumaları 20 Ekim 2026 tamamlamalarına dahildir. Gerçek ödeme ve kargo entegrasyonu kapsamı değiştirilmemiştir.

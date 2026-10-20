@@ -16,3 +16,10 @@ def test_sqlite_has_no_schema():
         assert engine.get_execution_options()['schema_translate_map'] == {'app': None}
     finally:
         engine.dispose()
+
+def test_production_requires_postgres(monkeypatch):
+    import pytest
+    monkeypatch.setenv('APP_ENV','production')
+    monkeypatch.delenv('DATABASE_URL',raising=False)
+    with pytest.raises(ValueError):build_engine()
+    with pytest.raises(ValueError):build_engine('sqlite://')

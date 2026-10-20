@@ -1,4 +1,4 @@
-param([string]$PythonExecutable)
+param([string]$PythonExecutable, [int]$Port=8000, [string]$BindAddress='127.0.0.1')
 $ErrorActionPreference = 'Stop'
 Set-Location -LiteralPath $PSScriptRoot
 if (-not $PythonExecutable) {
@@ -10,5 +10,5 @@ if (-not $PythonExecutable) {
 if (Test-Path -LiteralPath '.packages') {
     $env:PYTHONPATH = Join-Path $PSScriptRoot '.packages'
 }
-& $PythonExecutable -m uvicorn main:app --host 127.0.0.1 --port 8000
+& $PythonExecutable -m uvicorn main:app --host $BindAddress --port $Port --no-proxy-headers
 exit $LASTEXITCODE

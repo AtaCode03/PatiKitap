@@ -78,3 +78,50 @@ Testler ayrı, geçici SQLite veritabanı ve taklit edilmiş Supabase kimlikleri
 Satış, işlem gideri ve mama desteği simülasyondur. Örnek destek oranı %20, gider 0; kabul anında kuruş cinsinden sabitlenir. Gerçek para tahsilatı, banka/ödeme altyapısı, mama satın alma ve gerçek kargo entegrasyonu yoktur. Destek belgesi bir HTTPS bağlantısı olarak yönetici tarafından kaydedilir ve kayıt simülasyon olarak kalır. Bildirimler uygulama içidir; e-posta/SMS gönderilmez.
 
 Liste uçları sınırlı sonuç döndürür (katalog/işlemler 200, bildirimler 100). Gerçek kullanım büyüdüğünde sayfalama arayüzü ve yaşam döngüsü/saklama planı geliştirilmelidir.
+
+## Teknik tamamlamalar (20 Ekim 2026)
+
+- API çalışma hesabı `patikitap_runtime` oluşturuldu ve yerel DATABASE_URL bu hesaba geçirildi. Auth/Storage SQL tablolarına, tablo oluşturmaya/silmeye veya rol yönetimine erişemez. Denetim kayıtlarını değiştiremez; DELETE yalnızca favoriler içindir. Yönetim bağlantısı sadece yerel yönetim araçları için `ADMIN_DATABASE_URL` içinde saklanır; bunu dağıtıma taşımayın.
+- 6 eksik foreign-key indeksi Supabase migration ile eklendi. Başlangıç şeması ve sonraki değişiklikler Supabase migration geçmişinde tutulur; `docs/business-schema.sql` yeniden çalıştırılmaz.
+- Tüm sınırlı listeler `offset`/`limit` kabul eder. Arayüz 200 satırlık sayfaları birleştirir (10.000 kayıt güvenli sınırı); katalog 24'er kitap gösterir. Bu sürüm küçük kampüs pilotu içindir; çok büyük katalogda sunucu tarafında arama/sayfalama arayüzü tercih edilmelidir.
+- API'de işlem başına istek kimliği, JSON erişim logları, güvenli hata yanıtı, CSP ve güvenlik başlıkları bulunur. Parola, token, istek gövdesi veya URL query'si loglanmaz. Sınırlar tek süreç ve IP başına dakikada 300 okuma / 60 yazmadır. Reverse proxy headers varsayılan kapalıdır. Birden fazla instance için ortak rate-limit deposu kullanılmalıdır.
+- Görseller thread pool'da işlenir, EXIF kaldırılır; referans yollarında başka kullanıcı klasörü veya path traversal kabul edilmez. İmzalı fotoğraf bağlantıları arayüzün 4 dakikalık yenilemesiyle güncellenir.
+- Bağış/takas talebindeki kitap düzenleme ve kapatılmış hesaplara işlem açma kontrolleri sıkılaştırıldı.
+- Tek origin production: `Dockerfile` React'i derler ve FastAPI üzerinden sunar. Container root kullanıcısıyla çalışmaz; `/api/ready` şema/veritabanı kontrolü yapar. Production ortamında PostgreSQL DATABASE_URL zorunludur.
+- `backend/requirements.lock` Python sürümlerini sabitler. Frontend lockfile mevcuttur; npm güvenlik taramasında açık bulunmadı. GitHub Actions SQLite ve PostgreSQL testlerini, frontend test/derlemesini ve production bağımlılık güvenlik taramasını çalıştıracak biçimde eklendi.
+
+### Production paketi
+
+```powershell
+docker build -t patikitap .
+docker run --rm -p 8000:8000 --env-file .env.production patikitap
+```
+
+`.env.production` dosyasında yalnızca runtime `DATABASE_URL`, `APP_ENV=production` ve gerekiyorsa Supabase URL/publishable key bulunmalıdır; ADMIN_DATABASE_URL dağıtılmaz. TLS/alan adı ve SMTP hizmeti hosting ortamında yapılandırılır. Docker bu bilgisayarda kurulu olmadığı için image build yerelde çalıştırılamadı.
+
+### Uygulama yedeği
+
+Backend Python ortamında:
+
+```powershell
+python backup.py export
+python backup.py verify --file ../.backups/patikitap-TARIH.json
+```
+
+Bu işlem uygulama tablolarını yedekler; Auth şifrelerini, kullanıcı oturumlarını veya Storage dosyalarını içermez. Supabase'in proje yedeğinin/PITR'ın yerine geçmez. `.backups` git ve Docker kapsamı dışındadır; içeriği kullanıcı verisi olarak korunmalıdır.
+
+Geri yükleme yalnızca **ayrı, boş ve şeması kurulmuş** hedefe mümkündür. `RESTORE_DATABASE_URL` açıkça belirtilmelidir. Auth kullanıcı UUID'leri hedefte ayrıca mevcut olmalıdır. Dolu hedef reddedilir ve hiçbir kayıt silinmez. Transaction içindeki hata tüm yazmayı geri alır:
+
+```powershell
+python backup.py restore --file ../.backups/patikitap-TARIH.json
+```
+
+### PostgreSQL testleri
+
+`TEST_DATABASE_URL` verilirse API testleri her senaryoda rastgele `patikitap_test_...` şeması oluşturur ve sonunda yalnızca o test şemasını temizler. Normal `patikitap` verisine dokunmaz. CI bu testleri ayrı PostgreSQL 17 servisinde çalıştırır. Eşzamanlı iki kabulün aynı kitabı iki kez ayıramadığı burada test edilir; SQLite koşusunda bu tek test atlanır.
+
+### Harici doğrulama durumu
+
+20 Ekim kontrolünde Supabase yönetim bağlantısı çalışırken bu bilgisayardan pooler 5432 ve 6543 portlarına TCP bağlantısı reddedildi. Bu yüzden yeni runtime hesabının doğrudan oturum açması ve gerçek üyeli fotoğraf yükleme bu ağda doğrulanamadı; migration ve yetkiler yönetim bağlantısı üzerinden kontrol edildi. `/api/health` süreç kontrolüdür; `/api/ready` veritabanı erişimini de denetler. Canlı pilot öncesi readiness başarılı olmalıdır.
+
+İlk yönetici için kullanıcı tarafından bir e-posta adresi seçildi; Supabase'de doğrulanmış üyelik kaydı oluşmadan yönetici yetkisi verilmez. Hesap doğrulandıktan sonra yerel yönetim aracıyla bu hesaba atanır.

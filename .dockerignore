@@ -1,0 +1,15 @@
+.git
+**/.env
+**/.env.*
+!**/.env.example
+**/.packages
+**/.venv
+**/node_modules
+**/dist
+**/__pycache__
+**/.pytest_cache
+**/*.db
+**/*.db-*
+**/*.log
+**/audit-report.local.json
+**/.backups

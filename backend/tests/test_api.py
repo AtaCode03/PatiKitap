@@ -12,14 +12,33 @@ C='33333333-3333-4333-8333-333333333333'
 ADMIN='44444444-4444-4444-8444-444444444444'
 @pytest.fixture
 def client():
+    import os
+    from uuid import uuid4
+    from sqlalchemy.schema import CreateSchema,DropSchema
+    main.app.middleware_stack=None
     previous=main.engine
-    main.engine=create_engine('sqlite://',connect_args={'check_same_thread':False},poolclass=StaticPool).execution_options(schema_translate_map={'app':None})
-    @event.listens_for(main.engine,'connect')
-    def enable_fk(conn,record): conn.execute('PRAGMA foreign_keys=ON')
-    with TestClient(main.app) as client:
-        yield client
-    main.app.dependency_overrides.clear()
-    main.engine.dispose();main.engine=previous
+    url=os.getenv('TEST_DATABASE_URL')
+    schema=None
+    if url:
+        from database import build_engine
+        base=build_engine(url)
+        if base.dialect.name!='postgresql':raise ValueError('TEST_DATABASE_URL PostgreSQL olmalı.')
+        schema='patikitap_test_'+uuid4().hex
+        with base.begin() as c:c.execute(CreateSchema(schema))
+        main.engine=base.execution_options(schema_translate_map={'app':schema})
+    else:
+        main.engine=create_engine('sqlite://',connect_args={'check_same_thread':False},poolclass=StaticPool).execution_options(schema_translate_map={'app':None})
+        @event.listens_for(main.engine,'connect')
+        def enable_fk(conn,record):conn.execute('PRAGMA foreign_keys=ON')
+    try:
+        if schema:Base.metadata.create_all(main.engine)
+        with TestClient(main.app) as client:yield client
+    finally:
+        main.app.dependency_overrides.clear()
+        if schema:
+            assert schema.startswith('patikitap_test_') and len(schema)==47
+            with main.engine.begin() as c:c.execute(DropSchema(schema,cascade=True))
+        main.engine.dispose();main.engine=previous
 
 def as_user(uid,admin=False):
     main.app.dependency_overrides[identity]=lambda:Identity(uid,'Test Okur',admin,'test')
@@ -193,3 +212,30 @@ def test_suspended_users_cannot_write_or_read_private_data(client):
     as_user(ADMIN,True)
     assert client.patch(f'/api/admin/users/{A}',json={'disabled':False,'reason':'İnceleme sonrası erişim açıldı'}).status_code==200
     as_user(A);assert client.get('/api/me').status_code==200
+
+def test_pagination_and_blocked_owners(client):
+    b1=book(client);b2=book(client)
+    first=client.get('/api/books?limit=1&offset=0').json()
+    second=client.get('/api/books?limit=1&offset=1').json()
+    assert len(first)==len(second)==1 and first[0]['id']!=second[0]['id']
+    assert client.get('/api/books?limit=201').status_code==422
+    as_user(ADMIN,True)
+    client.patch(f'/api/admin/users/{A}',json={'disabled':True,'reason':'İnceleme için geçici kapatma'})
+    as_user(B)
+    assert client.post(f'/api/books/{b1["id"]}/requests',json={}).status_code==409
+
+def test_pending_exchange_offer_cannot_change(client):
+    target=book(client,'Takas');offer=book(client,'Takas',B)
+    request(client,target['id'],offered=offer['id'])
+    payload=dict(title='Değişen Kitap',author='Yazar',category='Roman',kind='Bağış',price=0,condition='İyi',location='Kampüs')
+    assert client.put(f'/api/books/{offer["id"]}',json=payload).status_code==409
+
+
+def test_concurrent_acceptance_reserves_book_only_once(client):
+    if main.engine.dialect.name!='postgresql':pytest.skip('Gerçek satır kilidi testi PostgreSQL CI jobunda çalışır.')
+    from concurrent.futures import ThreadPoolExecutor
+    b=book(client);r1=request(client,b['id'],B);r2=request(client,b['id'],C);as_user(A)
+    def accept_one(rid):return client.post(f'/api/requests/{rid}/action',json={'action':'accept'}).status_code
+    with ThreadPoolExecutor(max_workers=2) as pool:statuses=list(pool.map(accept_one,[r1['id'],r2['id']]))
+    assert sorted(statuses)==[200,409]
+    tx=client.get('/api/me/transactions').json();assert len(tx)==1
