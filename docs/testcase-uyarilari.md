@@ -62,6 +62,17 @@ Temizlik veya bırakılan kayıtlar:
 | NG-09 | P1 | Kullanılmış/süresi dolmuş doğrulama veya parola bağlantısını aç. | Uygulama başarı iddiasında bulunmaz; anlaşılır hata/yeni bağlantı isteme yolu sunar. |
 | NG-10 | P1 | Favori ekle/çıkar; bildirim oku; yenile. | Değişiklikler doğru kullanıcıya ait olarak kalıcıdır. |
 
+## 25 Ekim dal birleştirmesi için ek kabul senaryoları
+
+| ID | Öncelik | Senaryo | Beklenen sonuç |
+|---|---|---|---|
+| BR-01 | P0 | Yeni ilanda ISBN-10 (X kontrol karakteri dahil) ve ISBN-13 dene; dönen bilgiyi elle değiştirip kaydet. | Başlık, yazar, kategori ve yayınevi doldurulur; elle düzenlenen değer ve yayınevi yenilemeden sonra korunur. Katalog kapsamı sınırlıdır; bulunamayan kitap elle girilebilir. |
+| BR-02 | P0 | Bulunmayan ISBN veya katalog servisi hatası; ardından elle ilan açma. | Anlaşılır mesaj görünür; başka ISBN'ye ait Google Books sonucu otomatik doldurulmaz; elle giriş engellenmez. |
+| BR-03 | P0 | A geçmişsiz ilan açsın, B favorilesin; A silsin. | Silme onayı istenir; ilan katalog ve A'nın listesinden kalkar; B'nin favorilerinde başlığıyla kaldırıldı görünür; favoriden çıkarılabilir. |
+| BR-04 | P0 | Başkasının ilanını veya talep/işlem/şikâyet geçmişi olan kendi ilanını silmeyi dene. İptal edilmiş talebi de dene. | Başkası silemez; geçmiş silinmez; geçmişli ilan kalıcı silinemez. Uygun durumda arşivleme kullanılabilir. |
+| BR-05 | P0 | 100 TL ilanı favorile, sahibi fiyatı 80 TL yapsın; tekrar favorile ve yenile. | Favoriye eklenme fiyatı 100 TL kalır, 80 TL güncel fiyat ve indirim görünür; başka kullanıcının favorileri görünmez. |
+| BR-06 | P1 | Katalogda kaydır; giriş ve yönetim sayfasına geç; işletim sisteminde azaltılmış hareketi etkinleştir. | Kaydırma animasyonları desteklenen tarayıcıda çalışır; formlar/sekme düğmeleri kaybolmaz; azaltılmış harekette animasyonlar kapanır. |
+
 ## Veri ve kanıt güvenliği
 
 - Test ilanlarını `SMOKE-YYYYMMDD-...` ile adlandırın; gerçek adres, telefon, kimlik veya kişisel fotoğraf kullanmayın.

@@ -239,3 +239,102 @@ def test_concurrent_acceptance_reserves_book_only_once(client):
     with ThreadPoolExecutor(max_workers=2) as pool:statuses=list(pool.map(accept_one,[r1['id'],r2['id']]))
     assert sorted(statuses)==[200,409]
     tx=client.get('/api/me/transactions').json();assert len(tx)==1
+
+
+def test_publisher_and_isbn_survive_create_edit_and_search(client):
+    as_user(A)
+    payload=dict(title='Kitap',author='Yazar',publisher='Örnek Yayınevi',category='Roman',kind='Bağış',condition='İyi',location='Kampüs',isbn='080442957X')
+    response=client.post('/api/books',json=payload)
+    assert response.status_code==201,response.text
+    bid=response.json()['id']
+    assert response.json()['publisher']=='Örnek Yayınevi'
+    assert client.get('/api/books?q=080442957X').json()[0]['id']==bid
+    payload['publisher']='Yeni Yayınevi'
+    assert client.put(f'/api/books/{bid}',json=payload).json()['publisher']=='Yeni Yayınevi'
+    assert client.get('/api/me/books').json()[0]['publisher']=='Yeni Yayınevi'
+
+
+def test_delete_retains_favorite_snapshot_and_requires_owner(client):
+    b=book(client,'Satış');as_user(B)
+    assert client.put(f'/api/me/favorites/{b["id"]}').status_code==200
+    assert client.delete(f'/api/books/{b["id"]}/permanent').status_code==403
+    as_user(A)
+    assert client.delete(f'/api/books/{b["id"]}/permanent').status_code==204
+    assert client.get('/api/me/books').json()==[]
+    assert client.get('/api/books').json()==[]
+    as_user(B)
+    saved=client.get('/api/me/favorite-books').json()[0]
+    assert saved['id']==b['id'] and saved['title']==b['title'] and saved['status']=='removed'
+    assert saved['saved_price']==100
+    assert client.delete(f'/api/me/favorites/{b["id"]}').status_code==200
+    assert client.get('/api/me/favorite-books').json()==[]
+    as_user(ADMIN,True)
+    assert any(row['action']=='book.deleted' for row in client.get('/api/admin/audit').json())
+
+
+def test_favorite_price_baseline_is_stable_and_private(client):
+    b=book(client,'Satış');as_user(B)
+    client.put(f'/api/me/favorites/{b["id"]}')
+    as_user(A)
+    payload={key:b[key] for key in ('title','author','category','kind','condition','location')};payload['price']=80
+    assert client.put(f'/api/books/{b["id"]}',json=payload).status_code==200
+    assert client.get('/api/me/favorite-books').json()==[]
+    as_user(B);client.put(f'/api/me/favorites/{b["id"]}')
+    saved=client.get('/api/me/favorite-books').json()[0]
+    assert saved['price_dropped'] is True and saved['saved_price']==100 and saved['price']==80
+
+
+@pytest.mark.parametrize('history',['request','transaction','complaint','offered'])
+def test_permanent_delete_preserves_business_history(client,history):
+    b=book(client,'Takas' if history=='offered' else 'Bağış')
+    if history=='complaint':
+        as_user(B)
+        assert client.post('/api/complaints',json={'book_id':b['id'],'reason':'Kitap açıklaması inceleme gerektiriyor.'}).status_code==201
+    elif history=='offered':
+        target=book(client,'Takas',B)
+        request(client,target['id'],A,offered=b['id'])
+    else:
+        r=request(client,b['id'])
+        if history=='transaction':
+            tx=accept(client,r['id'])
+            assert client.post(f'/api/transactions/{tx["id"]}/cancel').status_code==200
+        else:
+            as_user(B)
+            client.post(f'/api/requests/{r["id"]}/action',json={'action':'cancel'})
+    as_user(A)
+    assert client.delete(f'/api/books/{b["id"]}/permanent').status_code==409
+    assert client.get('/api/me/books').json()[0]['id']==b['id']
+
+
+def test_archived_listing_without_history_can_be_deleted(client):
+    b=book(client)
+    assert client.delete(f'/api/books/{b["id"]}').status_code==200
+    assert client.delete(f'/api/books/{b["id"]}/permanent').status_code==204
+    assert client.delete(f'/api/books/{b["id"]}/permanent').status_code==404
+
+
+@pytest.mark.parametrize('source',['openlibrary','google','google10','wrong_google','offline','empty'])
+def test_isbn_lookup_providers_and_failures(client,monkeypatch,source):
+    import httpx
+    as_user(A)
+    original=httpx.AsyncClient
+    def provider(req):
+        if source=='offline':raise httpx.ConnectError('offline',request=req)
+        if req.url.path=='/search.json':
+            return httpx.Response(200,json={'docs':[{'title':'Arama başlığı','author_name':['фёдор достоевский'],'publisher':['Farklı baskı'],'subject':['fiction']}]} if source=='openlibrary' else {'docs':[]})
+        if req.url.host=='openlibrary.org':
+            return httpx.Response(200,json={'title':'Doğru baskı','publishers':['Doğru Yayınevi']}) if source=='openlibrary' else httpx.Response(404,json={})
+        if source in ('google','google10','wrong_google'):
+            identifier={'google':'9780140328721','google10':'0140328726','wrong_google':'9780980200447'}[source]
+            return httpx.Response(200,json={'items':[{'volumeInfo':{'title':'Google kitabı','authors':['Yazar'],'publisher':'Yayınevi','industryIdentifiers':[{'identifier':identifier}],'categories':['Science']}}]})
+        return httpx.Response(200,json={'items':[]})
+    monkeypatch.setattr(main.httpx,'AsyncClient',lambda **kwargs:original(transport=httpx.MockTransport(provider),**kwargs))
+    response=client.get('/api/isbn/9780140328721')
+    if source=='openlibrary':
+        assert response.status_code==200,response.text
+        assert response.json()=={'title':'Doğru baskı','author':'Fyodor Dostoyevski','category':'Roman','publisher':'Doğru Yayınevi'}
+    elif source in ('google','google10'):
+        assert response.status_code==200,response.text
+        assert response.json()['category']=='Bilim'
+    else:assert response.status_code==(502 if source=='offline' else 404),response.text
+    assert client.get('/api/isbn/not-an-isbn').status_code==422

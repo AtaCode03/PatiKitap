@@ -2,6 +2,16 @@
 
 React + FastAPI + Supabase tabanlı kitap paylaşımı ve örnek mama desteği uygulaması.
 
+## 25 Ekim 2026 dal birleştirmesi
+
+- `serife`: ISBN'den Open Library/Google Books üzerinden başlık, yazar, kategori ve yayınevi doldurma; elle düzenleme korunur. Eşleşmeyen Google Books sonucu otomatik kullanılmaz.
+- İlan sahibine kalıcı silme eklendi. Yalnızca aktif/arşivlenmiş, talep/işlem/şikâyet geçmişi olmayan ilanlar silinir; diğerleri arşivlenebilir. Silinen ilanın favori özeti ve denetim kaydı korunur.
+- Favorilerde güncel durum, kaldırılmış ilan ve favoriye alındıktan sonraki fiyat düşüşü takibi eklendi.
+- `sila-animasyon`: kaydırma ilerleme çubuğu, hero ve katalog animasyonları eklendi. Reduced-motion tercihi korunur; desteklemeyen tarayıcıda içerik normal görünür. Katalog sekmesi animasyonu Auth sekmelerine uygulanmaz.
+- Önceden yerelde bekleyen BrowserRouter/temiz URL ve korumalı sayfa değişiklikleri korundu. Yönlendirme için [rehber](docs/routing-auth.md); manuel kabul için [test case uyarıları](docs/testcase-uyarilari.md).
+- Canlı Supabase'de publisher ve favorite snapshot alanları, gerekli runtime izinleri ve RLS politikaları mevcut olduğu kontrol edildi. `docs/add-book-publisher.sql`, `docs/favorite-tracking.sql` ve `docs/runtime-role.sql` mevcut projede tekrar çalıştırılmaz; kurulum referanslarıdır.
+- Güncelleme sonrası frontend içinde `npm ci` çalıştırın; frontend ve backend süreçlerini yeniden başlatın. Veritabanı Supabase olarak kalır.
+
 ## Şimdiki durum
 
 - İlk Supabase kurulumu: `patikitap.books` ve 6 örnek kitap mevcut.

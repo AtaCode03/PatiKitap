@@ -170,7 +170,7 @@ def isbn_variants(value:str)->set[str]:
 async def lookup_isbn(isbn:str,user:USER):
     if not re.fullmatch(r'(?:\d{9}[\dXx]|\d{13})',isbn): raise HTTPException(422,'ISBN-10 veya ISBN-13 numarası gir.')
     entered_isbns=isbn_variants(isbn)
-    item={};exact_edition={};google_info={};google_candidate={};publisher='';provider_reachable=False
+    item={};exact_edition={};google_info={};publisher='';provider_reachable=False
     headers={'User-Agent':'PatiKitap/1.0'}
     async with httpx.AsyncClient(timeout=8,follow_redirects=True,headers=headers) as client:
         try:
@@ -190,14 +190,13 @@ async def lookup_isbn(isbn:str,user:USER):
                 provider_reachable=True
                 for volume in response.json().get('items') or []:
                     info=volume.get('volumeInfo') or {}
-                    if not google_candidate:google_candidate=info
                     identifiers=info.get('industryIdentifiers') or []
                     if any(entered_isbns & isbn_variants(entry.get('identifier','')) for entry in identifiers if isinstance(entry,dict)):
                         google_info=info
                         break
         except (httpx.HTTPError,ValueError,TypeError):pass
-        title=(item.get('title') or exact_edition.get('title') or google_info.get('title') or google_candidate.get('title') or '').strip()
-        authors=item.get('author_name') or google_info.get('authors') or google_candidate.get('authors') or []
+        title=(exact_edition.get('title') or google_info.get('title') or item.get('title') or '').strip()
+        authors=item.get('author_name') or google_info.get('authors') or []
         author=', '.join(turkish_author_name(name.strip()) for name in authors if isinstance(name,str) and name.strip())
         publishers=item.get('publisher') or item.get('publishers') or []
         if isinstance(publishers,str):publishers=[publishers]
@@ -205,7 +204,7 @@ async def lookup_isbn(isbn:str,user:USER):
         exact_publishers=exact_edition.get('publishers') or []
         if isinstance(exact_publishers,str):exact_publishers=[exact_publishers]
         publisher=next((value.strip() for value in exact_publishers if isinstance(value,str) and value.strip()),'') or (google_info.get('publisher') or '').strip() or search_publisher
-        subjects=item.get('subject') or google_info.get('categories') or google_candidate.get('categories') or []
+        subjects=item.get('subject') or google_info.get('categories') or []
         if isinstance(subjects,list):subjects=' '.join(s.lower() if isinstance(s,str) else str(s.get('name','')).lower() for s in subjects)
         else:subjects=str(subjects).lower()
     if not title or not author:
@@ -261,11 +260,11 @@ def delete_book(bid:int,session:DB,user:USER):
     book=lock_books(session,[bid]).get(bid)
     if not book: raise HTTPException(404,'Kitap bulunamadı.')
     if book.owner_id!=user.id: raise HTTPException(403,'Bu ilan sana ait değil.')
-    if book.status not in ('active','archived'): raise HTTPException(409,'Aktif veya işlemdeki bir kitap silinemez; işlem tamamlandıktan sonra tekrar dene.')
+    if book.status not in ('active','archived'): raise HTTPException(409,'Yalnızca aktif veya arşivlenmiş, işlem geçmişi olmayan ilanlar silinebilir.')
     if session.scalar(select(Transaction.id).where(or_(Transaction.book_id==bid,Transaction.offered_book_id==bid)).limit(1)):
         raise HTTPException(409,'Bu kitap işlem geçmişinde kullanılıyor; işlem kayıtları korunacağı için silinemez.')
     if session.scalar(select(Request.id).where(or_(Request.book_id==bid,Request.offered_book_id==bid)).limit(1)):
-        raise HTTPException(409,'Bu kitapta talep geçmişi var; önce talepleri sonuçlandırın veya iptal edin.')
+        raise HTTPException(409,'Bu kitapta talep geçmişi var; kayıtları korumak için kalıcı silme yerine arşivlemeyi kullan.')
     if session.scalar(select(Complaint.id).where(Complaint.book_id==bid).limit(1)):
         raise HTTPException(409,'Bu kitapla ilgili şikâyet kaydı var; kayıtları korumak için silinemez.')
     for favorite in session.scalars(select(Favorite).where(Favorite.book_id==bid)):
