@@ -21,6 +21,7 @@ class Book(Base):
     author: Mapped[str] = mapped_column(String(120))
     category: Mapped[str] = mapped_column(String(50))
     kind: Mapped[str] = mapped_column(String(20))
+    publisher: Mapped[str] = mapped_column(String(160), default='')
     price: Mapped[int] = mapped_column(default=0)
     condition: Mapped[str] = mapped_column(String(40))
     location: Mapped[str] = mapped_column(String(100))
@@ -96,7 +97,15 @@ class SupportRecord(Base):
 class Favorite(Base):
     __tablename__ = 'favorites'
     user_id: Mapped[str] = mapped_column(Uuid(as_uuid=False), ForeignKey('app.profiles.id'), primary_key=True)
-    book_id: Mapped[int] = mapped_column(ForeignKey('app.books.id'), primary_key=True, index=True)
+    # Deliberately no FK to books: a saved listing remains visible to its followers
+    # as "removed" after the owner permanently deletes it.
+    book_id: Mapped[int] = mapped_column(primary_key=True, index=True)
+    saved_price: Mapped[int | None] = mapped_column(Integer)
+    snapshot_title: Mapped[str | None] = mapped_column(String(160))
+    snapshot_author: Mapped[str | None] = mapped_column(String(120))
+    snapshot_kind: Mapped[str | None] = mapped_column(String(20))
+    snapshot_status: Mapped[str | None] = mapped_column(String(20))
+    saved_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
 class Notification(Base):
     __tablename__ = 'notifications'
     id: Mapped[int] = mapped_column(primary_key=True)
