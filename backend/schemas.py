@@ -7,11 +7,12 @@ class BookInput(Input):
     author: str = Field(min_length=1,max_length=120)
     category: Literal['Roman','Edebiyat','Bilim','Çocuk','Diğer']
     kind: Literal['Bağış','Takas','Satış']
+    publisher: str = Field(default='',max_length=160)
     price: int = Field(default=0,ge=0,le=100000)
     condition: Literal['İyi','Çok iyi','Yeni gibi']
     location: str = Field(min_length=1,max_length=100)
     description: str = Field(default='',max_length=2000)
-    isbn: str = Field(default='',pattern=r'^(\d{10}|\d{13})?$')
+    isbn: str = Field(default='',pattern=r'^(\d{9}[\dXx]|\d{13})?$')
     image_url: str = Field(default='',max_length=1000)
     @model_validator(mode='after')
     def price_rule(self):

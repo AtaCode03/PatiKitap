@@ -2,3 +2,4 @@ nav button{background:none;color:inherit;font-size:12px;padding:5px 0;display:fl
 .load-more{display:flex;margin:28px auto 0}
 
 .auth-page{max-width:560px;margin:35px auto}.auth-page .stack-form{display:grid;gap:16px}.auth-page label{display:grid;gap:7px}.auth-page input{width:100%;padding:12px;border:1px solid #dce2d7;border-radius:6px}
+.status-removed{background:#f6eae4;color:#ad604f}.favorite-discount{font-weight:800;color:#b45c3b!important;background:#fff0e9;border-radius:6px;padding:8px 10px;width:fit-content}

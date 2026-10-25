@@ -127,10 +127,100 @@ def edit_profile(data: ProfileInput,session: DB,user: USER):
     profile=get(session,Profile,user.id)
     for key,value in data.model_dump().items(): setattr(profile,key,value)
     return {**record(profile),'is_admin':user.is_admin}
+def turkish_author_name(name:str)->str:
+    name=' '.join(name.split())
+    known={
+        'фёдор михайлович достоевский':'Fyodor Mihayloviç Dostoyevski',
+        'федор михайлович достоевский':'Fyodor Mihayloviç Dostoyevski',
+        'фёдор достоевский':'Fyodor Dostoyevski',
+        'федор достоевский':'Fyodor Dostoyevski',
+        'лев николаевич толстой':'Lev Nikolayeviç Tolstoy',
+        'лев толстой':'Lev Tolstoy',
+        'антон павлович чехов':'Anton Pavloviç Çehov',
+        'антон чехов':'Anton Çehov',
+        'александр сергеевич пушкин':'Aleksandr Sergeyeviç Puşkin',
+        'александр пушкин':'Aleksandr Puşkin',
+        'николай васильевич гоголь':'Nikolay Vasilyeviç Gogol',
+    }
+    if name.casefold() in known:return known[name.casefold()]
+    transliteration={'а':'a','б':'b','в':'v','г':'g','д':'d','е':'e','ё':'yo','ж':'j','з':'z','и':'i','й':'y','к':'k','л':'l','м':'m','н':'n','о':'o','п':'p','р':'r','с':'s','т':'t','у':'u','ф':'f','х':'h','ц':'ts','ч':'ç','ш':'ş','щ':'şç','ъ':'','ы':'ı','ь':'','э':'e','ю':'yu','я':'ya'}
+    if not any(char in transliteration for char in name.casefold()):return name
+    words=[]
+    for word in name.split(' '):
+        parts=[]
+        for part in word.split('-'):
+            converted=''.join(transliteration.get(char,char) for char in part.casefold())
+            if converted.endswith('skiy'):converted=converted[:-1]
+            parts.append(converted[:1].upper()+converted[1:])
+        words.append('-'.join(parts))
+    return ' '.join(words)
+def isbn_variants(value:str)->set[str]:
+    value=re.sub(r'[^0-9Xx]','',value).upper()
+    variants={value}
+    if len(value)==13 and value.startswith('978') and value[3:12].isdigit():
+        core=value[3:12]
+        check=(11-sum(int(digit)*(10-index) for index,digit in enumerate(core))%11)%11
+        variants.add(core+('X' if check==10 else str(check)))
+    elif len(value)==10 and value[:9].isdigit():
+        core='978'+value[:9]
+        check=(10-sum(int(digit)*(1 if index%2==0 else 3) for index,digit in enumerate(core))%10)%10
+        variants.add(core+str(check))
+    return variants
+@app.get('/api/isbn/{isbn}')
+async def lookup_isbn(isbn:str,user:USER):
+    if not re.fullmatch(r'(?:\d{9}[\dXx]|\d{13})',isbn): raise HTTPException(422,'ISBN-10 veya ISBN-13 numarası gir.')
+    entered_isbns=isbn_variants(isbn)
+    item={};exact_edition={};google_info={};google_candidate={};publisher='';provider_reachable=False
+    headers={'User-Agent':'PatiKitap/1.0'}
+    async with httpx.AsyncClient(timeout=8,follow_redirects=True,headers=headers) as client:
+        try:
+            response=await client.get('https://openlibrary.org/search.json',params={'isbn':isbn,'fields':'title,author_name,subject,publisher','limit':1})
+            response.raise_for_status();docs=response.json().get('docs') or [];provider_reachable=True
+            if docs:item=docs[0]
+        except (httpx.HTTPError,ValueError,TypeError):pass
+        try:
+            response=await client.get(f'https://openlibrary.org/isbn/{isbn}.json')
+            if response.is_success:exact_edition=response.json();provider_reachable=True
+        except (httpx.HTTPError,ValueError,TypeError):pass
+        # Open Library's search index is incomplete; Google Books is a second source.
+        # Use only a volume that explicitly lists the entered ISBN.
+        try:
+            response=await client.get('https://www.googleapis.com/books/v1/volumes',params={'q':f'isbn:{isbn}','maxResults':10,'printType':'books'})
+            if response.is_success:
+                provider_reachable=True
+                for volume in response.json().get('items') or []:
+                    info=volume.get('volumeInfo') or {}
+                    if not google_candidate:google_candidate=info
+                    identifiers=info.get('industryIdentifiers') or []
+                    if any(entered_isbns & isbn_variants(entry.get('identifier','')) for entry in identifiers if isinstance(entry,dict)):
+                        google_info=info
+                        break
+        except (httpx.HTTPError,ValueError,TypeError):pass
+        title=(item.get('title') or exact_edition.get('title') or google_info.get('title') or google_candidate.get('title') or '').strip()
+        authors=item.get('author_name') or google_info.get('authors') or google_candidate.get('authors') or []
+        author=', '.join(turkish_author_name(name.strip()) for name in authors if isinstance(name,str) and name.strip())
+        publishers=item.get('publisher') or item.get('publishers') or []
+        if isinstance(publishers,str):publishers=[publishers]
+        search_publisher=next((value.strip() for value in publishers if isinstance(value,str) and value.strip()),'')
+        exact_publishers=exact_edition.get('publishers') or []
+        if isinstance(exact_publishers,str):exact_publishers=[exact_publishers]
+        publisher=next((value.strip() for value in exact_publishers if isinstance(value,str) and value.strip()),'') or (google_info.get('publisher') or '').strip() or search_publisher
+        subjects=item.get('subject') or google_info.get('categories') or google_candidate.get('categories') or []
+        if isinstance(subjects,list):subjects=' '.join(s.lower() if isinstance(s,str) else str(s.get('name','')).lower() for s in subjects)
+        else:subjects=str(subjects).lower()
+    if not title or not author:
+        if not provider_reachable:raise HTTPException(502,'Kitap kataloglarına şu anda ulaşılamıyor. Biraz sonra tekrar dene veya bilgileri elle gir.')
+        raise HTTPException(404,'Bu ISBN için katalogda kayıt bulunamadı. Kitap bilgilerini elle girebilirsin.')
+    if any(word in subjects for word in ('children','juvenile','young adult','çocuk')): category='Çocuk'
+    elif any(word in subjects for word in ('science','technology','mathematics','physics','biology','computer')): category='Bilim'
+    elif any(word in subjects for word in ('novel','fiction','romance','mystery','fantasy','thriller')): category='Roman'
+    elif any(word in subjects for word in ('literature','poetry','essay')): category='Edebiyat'
+    else: category='Diğer'
+    return {'title':title[:160],'author':author[:120],'category':category,'publisher':publisher[:160]}
 @app.get('/api/books')
 def list_books(session: DB, q: str='', category: str='', kind: str='', offset: int=Query(0,ge=0),limit:int=Query(200,ge=1,le=200)):
     statement=select(Book).where(Book.status=='active')
-    if q.strip(): statement=statement.where(or_(Book.title.ilike('%'+q.strip()[:160]+'%'),Book.author.ilike('%'+q.strip()[:160]+'%')))
+    if q.strip(): statement=statement.where(or_(Book.title.ilike('%'+q.strip()[:160]+'%'),Book.author.ilike('%'+q.strip()[:160]+'%'),Book.isbn.ilike('%'+q.strip()[:13]+'%')))
     if category: statement=statement.where(Book.category==category)
     if kind: statement=statement.where(Book.kind==kind)
     return [record(b) for b in session.scalars(statement.order_by(Book.id.desc()).offset(offset).limit(limit))]
@@ -166,6 +256,28 @@ def archive_book(bid:int,session:DB,user:USER):
         req.status='rejected';notify(session,req.requester_id,'İlgili kitap arşivlendiği için talebin kapatıldı.')
     audit(session,user,'book.archived',book)
     return {'status':'archived'}
+@app.delete('/api/books/{bid}/permanent',status_code=204)
+def delete_book(bid:int,session:DB,user:USER):
+    book=lock_books(session,[bid]).get(bid)
+    if not book: raise HTTPException(404,'Kitap bulunamadı.')
+    if book.owner_id!=user.id: raise HTTPException(403,'Bu ilan sana ait değil.')
+    if book.status not in ('active','archived'): raise HTTPException(409,'Aktif veya işlemdeki bir kitap silinemez; işlem tamamlandıktan sonra tekrar dene.')
+    if session.scalar(select(Transaction.id).where(or_(Transaction.book_id==bid,Transaction.offered_book_id==bid)).limit(1)):
+        raise HTTPException(409,'Bu kitap işlem geçmişinde kullanılıyor; işlem kayıtları korunacağı için silinemez.')
+    if session.scalar(select(Request.id).where(or_(Request.book_id==bid,Request.offered_book_id==bid)).limit(1)):
+        raise HTTPException(409,'Bu kitapta talep geçmişi var; önce talepleri sonuçlandırın veya iptal edin.')
+    if session.scalar(select(Complaint.id).where(Complaint.book_id==bid).limit(1)):
+        raise HTTPException(409,'Bu kitapla ilgili şikâyet kaydı var; kayıtları korumak için silinemez.')
+    for favorite in session.scalars(select(Favorite).where(Favorite.book_id==bid)):
+        favorite.snapshot_title=book.title
+        favorite.snapshot_author=book.author
+        favorite.snapshot_kind=book.kind
+        favorite.snapshot_status='removed'
+        favorite.saved_price=favorite.saved_price if favorite.saved_price is not None else book.price
+    audit(session,user,'book.deleted',book)
+    session.flush()
+    session.delete(book)
+    return Response(status_code=204)
 def normalize_image(content):
     try:
         with Image.open(BytesIO(content)) as im:
@@ -194,10 +306,32 @@ async def upload_image(request:HttpRequest,user:USER):
 @app.get('/api/me/favorites')
 def favorites(session:DB,user:USER):
     return [row for row in session.scalars(select(Favorite.book_id).where(Favorite.user_id==user.id))]
+@app.get('/api/me/favorite-books')
+def favorite_books(session:DB,user:USER):
+    rows=session.execute(select(Favorite,Book).outerjoin(Book,Book.id==Favorite.book_id).where(Favorite.user_id==user.id).order_by(Favorite.saved_at.desc(),Favorite.book_id.desc()))
+    result=[]
+    for favorite,book in rows:
+        if book is None:
+            result.append({'id':favorite.book_id,'title':favorite.snapshot_title or 'Kaldırılan ilan','author':favorite.snapshot_author or '',
+                'kind':favorite.snapshot_kind or '', 'status':'removed','price':favorite.saved_price or 0,
+                'saved_price':favorite.saved_price,'price_dropped':False,'saved_at':favorite.saved_at})
+        else:
+            result.append({**record(book),'saved_price':favorite.saved_price,
+                'price_dropped':book.kind=='Satış' and favorite.saved_price is not None and book.price<favorite.saved_price,
+                'saved_at':favorite.saved_at})
+    return result
 @app.put('/api/me/favorites/{bid}')
 def save_favorite(bid:int,session:DB,user:USER):
-    get(session,Book,bid)
-    if not session.get(Favorite,(user.id,bid)): session.add(Favorite(user_id=user.id,book_id=bid))
+    book=get(session,Book,bid)
+    favorite=session.get(Favorite,(user.id,bid))
+    if not favorite:
+        favorite=Favorite(user_id=user.id,book_id=bid,saved_price=book.price,snapshot_title=book.title,
+            snapshot_author=book.author,snapshot_kind=book.kind,snapshot_status=book.status)
+        session.add(favorite)
+    elif favorite.saved_price is None:
+        favorite.saved_price=book.price
+        favorite.snapshot_title=book.title;favorite.snapshot_author=book.author
+        favorite.snapshot_kind=book.kind;favorite.snapshot_status=book.status
     return {'saved':True}
 @app.delete('/api/me/favorites/{bid}')
 def unsave_favorite(bid:int,session:DB,user:USER):
