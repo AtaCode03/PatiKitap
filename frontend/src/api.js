@@ -3,11 +3,15 @@ export async function bootstrap(){
  const r=await fetch('/api/config',{signal:AbortSignal.timeout(20000)});
  if(!r.ok)throw Error('API sunucusuna ulaşılamıyor. Sunucuyu başlatıp sayfayı yenile.');
  const config=await r.json();
- return createClient(config.supabase_url,config.supabase_publishable_key);
+ const client=createClient(config.supabase_url,config.supabase_publishable_key,{auth:{flowType:'pkce'}});
+ // Subscribe before initialization completes so recovery events cannot precede React.
+ client.auth.onAuthStateChange(event=>{if(event==='PASSWORD_RECOVERY')client.passwordRecovery=true});
+ return client;
 }
 export function makeApi(client){
  const api=async(path,options={})=>{
-  const {data:{session}}=await client.auth.getSession();
+  const {data:{session},error:sessionError}=await client.auth.getSession();
+  if(sessionError)throw Error('Oturum yenilenemedi. Yeniden giriş yap.');
   const headers={...options.headers};
   if(session)headers.Authorization=`Bearer ${session.access_token}`;
   let body=options.body;

@@ -12,6 +12,7 @@ from fastapi.responses import JSONResponse
 from operations import OperationalMiddleware
 import logging
 from fastapi.staticfiles import StaticFiles
+from spa import SPAStaticFiles
 from pathlib import Path
 from sqlalchemy import select, text, func, or_, inspect
 from sqlalchemy.orm import Session
@@ -420,4 +421,4 @@ def readiness(session:DB):
 # A built React application can be served from the same origin in production.
 DIST=Path(__file__).resolve().parent.parent/'frontend'/'dist'
 if DIST.is_dir():
-    app.mount('/',StaticFiles(directory=str(DIST),html=True),name='frontend')
+    app.mount('/',SPAStaticFiles(directory=str(DIST),html=True),name='frontend')
