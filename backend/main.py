@@ -575,7 +575,11 @@ def confirm(tid:int,session:DB,user:USER):
             )
 
     deliveries=session.scalars(select(Delivery).where(Delivery.transaction_id==tx.id)).all()
-    if not deliveries or any(d.status=='pending' for d in deliveries): raise HTTPException(409,'Önce tüm teslimatlar hazırlanmalı.')
+    if not deliveries or any(
+        d.status not in ('dispatched', 'delivered')
+        for d in deliveries
+    ):
+        raise HTTPException(409, 'Önce tüm teslimatlar hazırlanmalı.')
     if user.id==tx.owner_id: tx.owner_confirmed=True
     else: tx.requester_confirmed=True
     for d in deliveries:
