@@ -4,6 +4,7 @@ import {BrowserRouter,Routes,Route,Navigate,useLocation,useNavigate} from 'react
 import {viewPaths,authModes,pageFor,safeReturnPath} from './routing';
 import {Search,ArrowUpRight,Plus,X,MapPin,Heart,BookOpen,PawPrint,Check,LogOut,Shield,RefreshCw} from 'lucide-react';
 import {bootstrap,makeApi} from './api';
+import {isCurrentTransactionRefresh} from './transactionRefreshGuard.js';
 import {money,stamp,Select,Status,Modal,AuthForm,PasswordForm,BookForm,RequestForm,DeliveryForm,TextAction} from './forms';
 import {Account,Admin} from './Workspace';
 import './style.css';
@@ -17,9 +18,10 @@ function App({client}){
  useEffect(()=>{if(window.location.href.endsWith('#'))navigate(location.pathname+location.search,{replace:true})},[location.hash]);
  const [session,setSession]=useState(null),[me,setMe]=useState(null),[books,setBooks]=useState([]),[own,setOwn]=useState([]),[requests,setRequests]=useState([]),[transactions,setTransactions]=useState([]),[notifications,setNotifications]=useState([]),[complaints,setComplaints]=useState([]),[favorites,setFavorites]=useState([]),[favoriteBooks,setFavoriteBooks]=useState([]),[impact,setImpact]=useState({}),[support,setSupport]=useState([]),[signed,setSigned]=useState({}),[modal,setModal]=useState(null),[notice,setNotice]=useState(''),[error,setError]=useState(''),[loading,setLoading]=useState(true),[busy,setBusy]=useState(false),[query,setQuery]=useState(''),[category,setCategory]=useState('Tüm kategoriler'),[kind,setKind]=useState('Tümü'),[sort,setSort]=useState('Yeni eklenenler'),[onlyFavorites,setOnlyFavorites]=useState(false),[visibleCount,setVisibleCount]=useState(24),[adminData,setAdminData]=useState(null);
  const generation=useRef(0);
+ const transactionRefreshId=useRef(0);
  useEffect(()=>{setVisibleCount(24)},[query,category,kind,sort,onlyFavorites]);
  useEffect(()=>{const timer=setInterval(()=>refresh(),240000);return()=>clearInterval(timer)},[]);
- async function refresh(){const gen=++generation.current;setError('');try{
+ async function refresh(){const gen=++generation.current;++transactionRefreshId.current;setError('');try{
  const {data:{session:current}}=await client.auth.getSession();
  if(gen!==generation.current)return;
  let m=null;
@@ -39,13 +41,33 @@ function App({client}){
  const run=(...args)=>act(...args).catch(()=>{});
  const refreshTransactions = useCallback(async () => {
     if (!session) return;
+
+    const requestGeneration = generation.current;
+    const requestId = ++transactionRefreshId.current;
+    const requestUserId = session.user.id;
+
     try {
       const updated = await api.list('/me/transactions');
+      const {data: {session: current}} = await client.auth.getSession();
+
+      if (!isCurrentTransactionRefresh({
+        requestGeneration,
+        currentGeneration: generation.current,
+        requestId,
+        currentRequestId: transactionRefreshId.current,
+        requestUserId,
+        currentUserId: current?.user?.id
+      })) return;
+
       setTransactions(updated);
     } catch (e) {
-      setError(e.message || 'İşlemler yenilenemedi.');
+      if (requestGeneration === generation.current &&
+          requestId === transactionRefreshId.current) {
+        setError(e.message || 'İşlemler yenilenemedi.');
+      }
     }
-  }, [api, session?.user?.id]);
+  }, [api, client, session?.user?.id]);
+
   async function done(){setModal(null);setNotice('Bilgiler kaydedildi.');await refresh()}
  async function favorite(id){if(!requireUser())return;await run(`/me/favorites/${id}`,null,favorites.includes(id)?'DELETE':'PUT')}
  const filtered=books.filter(b=>(!onlyFavorites||favorites.includes(b.id))&&(kind==='Tümü'||b.kind===kind)&&(category==='Tüm kategoriler'||b.category===category)&&`${b.title} ${b.author} ${b.isbn}`.toLocaleLowerCase('tr').includes(query.toLocaleLowerCase('tr'))).sort((a,b)=>sort==='Kitap adı'?a.title.localeCompare(b.title,'tr'):b.id-a.id);

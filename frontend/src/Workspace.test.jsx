@@ -192,3 +192,45 @@ test('gizli tarayıcı sekmesinde işlem yenileme isteği gönderilmez', () => {
     vi.useRealTimers();
   }
 });
+
+test.each([
+  ['pending', false],
+  ['dispatched', true],
+  ['cancelled', false]
+])('teslimat durumu %s olduğunda onay butonu görünürlüğü %s', (deliveryStatus, shouldShow) => {
+  const transaction = makeTransaction('Bağış', null);
+  transaction.status = 'in_delivery';
+
+  transaction.deliveries = [
+    {
+      ...transaction.deliveries[0],
+      status: 'dispatched'
+    },
+    {
+      ...transaction.deliveries[0],
+      id: 202,
+      sender_id: buyerId,
+      recipient_id: sellerId,
+      status: deliveryStatus
+    }
+  ];
+
+  const {setModal} = renderAccount(transaction);
+
+  const confirmButton = screen.queryByRole('button', {
+    name: 'Teslimi onayla'
+  });
+
+  if (shouldShow) {
+    expect(confirmButton).toBeInTheDocument();
+
+    fireEvent.click(confirmButton);
+
+    expect(setModal).toHaveBeenCalledWith({
+      type: 'confirm',
+      transaction: expect.objectContaining({id: 101})
+    });
+  } else {
+    expect(confirmButton).not.toBeInTheDocument();
+  }
+});
