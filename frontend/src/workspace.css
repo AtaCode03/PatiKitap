@@ -3,3 +3,207 @@ nav button{background:none;color:inherit;font-size:12px;padding:5px 0;display:fl
 
 .auth-page{max-width:560px;margin:35px auto}.auth-page .stack-form{display:grid;gap:16px}.auth-page label{display:grid;gap:7px}.auth-page input{width:100%;padding:12px;border:1px solid #dce2d7;border-radius:6px}
 .status-removed{background:#f6eae4;color:#ad604f}.favorite-discount{font-weight:800;color:#b45c3b!important;background:#fff0e9;border-radius:6px;padding:8px 10px;width:fit-content}
+
+/* PatiKitap: ana sayfada yeni eklenen kitaplar */
+.recent-home{padding:34px 0 24px}
+.recent-home .section-heading{align-items:center}
+.recent-home .section-heading h2{margin-bottom:7px}
+.recent-home .book-grid{grid-template-columns:repeat(3,minmax(0,1fr))}
+@media(max-width:640px){.recent-home{padding:24px 0 10px}.recent-home .section-heading{align-items:flex-start;gap:12px}.recent-home .section-heading .secondary{white-space:nowrap;padding:10px;font-size:10px}.recent-home .book-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.mobile-nav{flex-wrap:wrap}}
+
+/* PatiKitap işlem akışı – v1 */
+.flow-guide{background:#f7f8f3;border:1px solid #e4e9dc;border-radius:12px;padding:16px;margin:16px 0}
+.flow-steps{display:grid;grid-template-columns:repeat(auto-fit,minmax(90px,1fr));gap:8px}
+.flow-step{display:flex;align-items:center;gap:7px;color:#859183;font-size:11px}
+.flow-step>span{display:grid;place-items:center;flex-shrink:0;width:25px;height:25px;border-radius:50%;background:#e5e9e1;font-size:11px;font-weight:800}
+.flow-step.done>span{background:#176b5b;color:white}
+.flow-step.current>span{background:#d6eadf;color:#176b5b;outline:2px solid #176b5b}
+.flow-step small{font-size:10px;line-height:1.4}
+.flow-next{margin:14px 0 0!important;color:#315a4d!important;font-weight:700}
+.flow-no-payment{font-size:11px!important;color:#557565!important;margin:7px 0 0!important}
+.flow-filter{display:flex;flex-wrap:wrap;gap:8px;margin:18px 0}
+.flow-filter button{background:#f0f4ed;border-radius:8px;padding:10px 14px;color:#486b5d;font-size:11px}
+.flow-filter button.selected{background:#176b5b;color:white}
+@media(max-width:640px){.flow-steps{grid-template-columns:repeat(2,minmax(0,1fr))}.flow-guide{padding:12px}}
+
+/* Kitap Ekle: tam sayfa form */
+.book-create-page{padding-top:36px}
+.book-create-heading{display:flex;justify-content:space-between;align-items:center;gap:20px;margin:12px 0 24px}
+.book-create-heading .page-title{margin:10px 0 8px}
+.book-create-layout{display:grid;grid-template-columns:minmax(0,1.6fr) minmax(240px,.85fr);gap:28px;align-items:start}
+.book-create-panel{background:#fff;border:1px solid #e4e9dc;border-radius:16px;padding:30px}
+.book-create-panel .stack-form{margin:0;gap:19px}
+.book-create-panel .stack-form input,.book-create-panel .stack-form textarea,.book-create-panel .stack-form select{min-height:44px}
+.book-create-panel .stack-form .primary{justify-self:start;margin-top:10px}
+.book-create-aside{background:#f3f5ed;border-radius:16px;padding:25px;position:sticky;top:24px}
+.book-create-aside h2{font-size:18px;margin-bottom:18px}
+.book-create-aside p{font-size:12px;line-height:1.85;color:#687c6a}
+.book-create-aside .prototype{margin-top:20px}
+@media(max-width:750px){.book-create-layout{grid-template-columns:1fr}.book-create-heading{align-items:flex-start;flex-wrap:wrap}.book-create-panel{padding:20px}.book-create-aside{position:static}}
+
+
+/* PATIKITAP_WARM_MODERN_START */
+:root { --pk-ink:#244a46; --pk-green:#397454; --pk-blue:#005f86; --pk-cream:#faf8f3; --pk-line:#e5e9df; --pk-muted:#73867c; }
+body { background:var(--pk-cream); color:var(--pk-ink); }
+header { min-height:94px; height:auto; gap:22px; }
+header nav { align-items:center; flex-wrap:wrap; gap:8px 20px; }
+header nav button { font-size:12px; font-weight:650; color:#637b71; border-radius:10px; padding:10px 9px; transition:background .18s,color .18s; }
+header nav button:hover { background:#eaf1e8; color:var(--pk-ink); }
+header nav button.active { color:var(--pk-blue); background:#e8f1f2; }
+header .brand-button { flex-shrink:0; }
+.announcement { background:#eaf1e6; color:#53705c; letter-spacing:.02em; }
+main { padding-bottom:28px; }
+.hero { align-items:center; gap:46px; }
+.hero-copy h1 { color:var(--pk-ink); }
+.hero-copy h1 em { color:var(--pk-blue); }
+.hero-copy>p { color:var(--pk-muted); font-size:14px; }
+.hero-art { background:#efefe5; }
+.section-heading h2,.how h2,.page-title { color:var(--pk-ink); }
+.section-heading { gap:18px; }
+.catalog { padding-top:40px; }
+.book-grid { gap:22px; }
+.book-card { border:1px solid var(--pk-line); border-radius:17px; box-shadow:0 4px 16px #294b4010; }
+.book-card:hover { transform:translateY(-5px); box-shadow:0 16px 35px #294b4020; }
+.book-stage { background:#f2efe7; }
+.book-info { padding:21px; }
+.book-info h3 { line-height:1.4; }
+.badge { border-radius:20px; padding:7px 11px; font-weight:700; background:#fffdf7ed; }
+.favorite { box-shadow:0 3px 12px #203a2915; }
+.primary { border-radius:11px; box-shadow:0 4px 12px #005f861c; transition:transform .18s,background .18s; }
+.primary:hover { transform:translateY(-1px); }
+.secondary { border-radius:11px; }
+.search { border-radius:12px; background:#fff; border-color:var(--pk-line); box-shadow:0 2px 9px #294b4009; }
+select { border-radius:11px; }
+.tabs { flex-wrap:wrap; }
+.tabs button { border-radius:10px; }
+.tabs button.selected { background:#e4f0e6; color:#2e6d4b; }
+.how { background:#edf2e9; border-radius:22px; }
+.workspace-tabs { gap:8px; }
+.workspace-tabs button { border-radius:10px; }
+.workspace-tabs button.selected { background:#e3efe5; color:#286b4b; }
+.row-card,.transaction-card { border-radius:16px; border-color:var(--pk-line); box-shadow:0 3px 15px #294b400a; }
+.metrics>div { border-radius:15px; }
+.dialog { border-radius:20px; }
+.mobile-nav { background:#faf8f3; }
+.mobile-nav button { border-radius:9px; }
+.mobile-nav button:hover { background:#eaf1e8; }
+footer { border-color:var(--pk-line); }
+@media(max-width:1000px) { header { gap:12px; } header nav { gap:4px 8px; } header nav button { font-size:11px; padding:8px 6px; } }
+@media(max-width:640px) {
+ header { min-height:74px; }
+ .mobile-nav { display:flex; flex-wrap:wrap; justify-content:center; gap:4px 10px; padding:10px 12px; }
+ .mobile-nav button { padding:9px 10px; font-weight:650; }
+ .hero { gap:12px; }
+ .hero-copy>p { font-size:13px; }
+ .book-grid { gap:12px; }
+ .book-info { padding:12px; }
+ .book-card { border-radius:13px; }
+ .section-heading { align-items:center; }
+ .catalog { padding-top:28px; }
+ .workspace-tabs { gap:4px; }
+ .workspace-tabs button { padding:10px 12px; }
+}
+@media(prefers-reduced-motion:reduce) { .book-card,.primary,header nav button { transition:none; } }
+/* PATIKITAP_WARM_MODERN_END */
+
+
+/* PatiKitap logo görünümü */
+.brand-button {
+  background: transparent !important;
+  border: none;
+  box-shadow: none;
+  padding: 0;
+}
+
+.brand-button .logo {
+  display: block;
+  width: 160px;
+  height: auto;
+  object-fit: contain;
+  mix-blend-mode: multiply;
+}
+
+@media (max-width: 640px) {
+  .brand-button .logo {
+    width: 135px;
+  }
+
+  /* Belirgin çıkış butonu */
+.header-actions .icon-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 11px 16px;
+  border: 1px solid #e8d6c8;
+  border-radius: 10px;
+  background: #fff2e8;
+  color: #a55436;
+  font-size: 12px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.header-actions .icon-button:hover {
+  background: #ffe4d5;
+  color: #8d3d26;
+}
+}
+
+/* PATIKITAP_HEADER_REPAIR_START */
+/* Orijinal, şeffaf PNG: JPEG'in beyaz kutusunu ve blend mode'u kaldır. */
+header .brand-button {background:transparent!important;border:0!important;box-shadow:none!important;padding:0!important;display:flex;align-items:center}
+header .brand-button .logo {display:block;width:190px;max-width:100%;height:auto;mix-blend-mode:normal!important;background:transparent!important;object-fit:contain}
+header .header-actions .icon-button {display:inline-flex!important;align-items:center;justify-content:center;gap:9px;padding:12px 17px!important;background:#fff0e2!important;border:1px solid #efc9a6!important;border-radius:12px!important;color:#91481e!important;font-size:12px!important;font-weight:800!important;white-space:nowrap;box-shadow:0 3px 10px #8a4b2110}
+header .header-actions .icon-button:hover {background:#ffe3cd!important;color:#743715!important}
+header .header-actions .icon-button svg {width:17px;height:17px;flex-shrink:0}
+/* Henüz kitap yoksa kocaman boş liste yerine kısa bilgilendirme alanı. */
+.recent-home .empty {padding:24px 16px!important;margin:8px 0 4px;background:#f0f3e9;border:1px dashed #d8e2d1;border-radius:14px;color:#62796b}
+.recent-home:has(.empty) {padding-bottom:8px}
+.recent-home:has(.empty)+.hero {padding-top:28px}
+@media(max-width:900px){header .brand-button .logo{width:155px}}
+@media(max-width:640px){header .brand-button .logo{width:136px}header .header-actions .icon-button{padding:9px 11px!important;font-size:10px!important;gap:5px}}
+/* PATIKITAP_HEADER_REPAIR_END */
+
+
+/* PatiKitap UI refresh v2 — scoped, non-functional presentation changes */
+.recent-home-empty{padding-top:18px!important;padding-bottom:0!important}
+.recent-home-empty .section-heading{margin-bottom:12px}
+.pk-empty-books{max-width:580px;margin:0 auto 4px;padding:18px 24px 20px;text-align:center;background:#f0f4eb;border:1px dashed #cbd9c6;border-radius:20px;color:#496a5e}
+.pk-empty-books svg{color:#64916e;margin:auto}
+.pk-empty-books h3{font-size:18px;color:#284c43;margin:6px 0}
+.pk-empty-books p{font-size:13px;margin:6px 0 15px}
+.pk-empty-books .primary{display:inline-flex;gap:8px;align-items:center}
+.recent-home-empty+.hero{padding-top:20px!important}
+.book-card{overflow:hidden;background:#fffefa;transition:transform .2s ease,box-shadow .2s ease}
+.book-card .book-info{padding:16px 17px 18px}
+.book-card .book-info h3{line-height:1.35}
+.book-card .badge{border-radius:999px;padding:7px 10px;font-weight:750}
+.book-card .pk-kind-donation{background:#e0f1e3;color:#24643d}
+.book-card .pk-kind-swap{background:#e5eef8;color:#315e91}
+.book-card .pk-kind-sale{background:#fff0d9;color:#976125}
+.pk-card-action{display:inline-flex!important;align-items:center;gap:5px;padding:8px 11px!important;border-radius:9px!important;font-size:12px!important;white-space:nowrap}
+.pk-form-intro{border-bottom:1px solid #e8e7dd;margin-bottom:24px;padding-bottom:16px}
+.pk-form-intro span{font-size:11px;letter-spacing:.12em;font-weight:800;color:#74916f}
+.pk-form-intro h2{font-size:24px;margin:8px 0;color:#284b43}
+.pk-form-intro p{color:#72857c;font-size:13px;line-height:1.65;margin:0}
+.pk-book-form .pk-form-section-title{font-weight:800;color:#285449;font-size:15px;margin:13px 0 0;padding-bottom:7px;border-bottom:1px solid #e9e9df}
+.pk-kind-hint,.pk-request-guide{background:#eff5ec;border:1px solid #dae6d7;border-radius:13px;padding:13px 15px;color:#47695c;font-size:13px;line-height:1.7}
+.pk-request-guide{margin-bottom:16px}
+.pk-request-guide strong{display:block;color:#285449;font-size:16px}
+.pk-request-guide p{margin:7px 0}
+.pk-request-guide small{display:block;color:#708377}
+.pk-book-form label{font-weight:650;color:#426259}
+.pk-book-form input,.pk-book-form select,.pk-book-form textarea{border-radius:11px!important;background:#fff!important}
+.pk-book-form input:focus,.pk-book-form select:focus,.pk-book-form textarea:focus{outline:2px solid #99c5b0;outline-offset:1px}
+.pk-aside-icon{width:48px;height:48px;display:grid;place-items:center;border-radius:14px;background:#fbe8d4;color:#b36e36;margin-bottom:16px}
+.pk-account-subtitle{color:#71877a;margin-top:-5px;margin-bottom:20px}
+.pk-account-summary{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:13px;margin:20px 0 25px}
+.pk-account-summary>div{background:#f1f5ed;border:1px solid #e0e9da;border-radius:15px;padding:16px 18px;display:flex;flex-direction:column;gap:6px}
+.pk-account-summary strong{font-size:27px;color:#28564a}
+.pk-account-summary span{font-size:12px;color:#647b70}
+.pk-request-card,.pk-transaction-card,.pk-notification{border-radius:16px!important;border:1px solid #e1e8dd!important;background:#fffefa!important;box-shadow:0 5px 18px #31564c0a}
+.pk-notification.unread{border-left:4px solid #e6a25b!important;background:#fffaf2!important}
+.workspace-tabs{overflow-x:auto;scrollbar-width:thin;padding-bottom:8px}
+.workspace-tabs button{white-space:nowrap}
+@media(max-width:700px){.pk-account-summary{gap:7px}.pk-account-summary>div{padding:12px 9px}.pk-account-summary strong{font-size:21px}.pk-account-summary span{font-size:10px}.pk-empty-books{padding:16px}.book-create-panel{padding:18px!important}}
