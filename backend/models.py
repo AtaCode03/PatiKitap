@@ -68,6 +68,56 @@ class Transaction(Base):
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     __table_args__ = (CheckConstraint("status in ('accepted','in_delivery','completed','cancelled','disputed')", name='transaction_status'),
         CheckConstraint('price_cents >= 0 and support_cents >= 0 and fee_cents >= 0 and support_cents + fee_cents <= price_cents',name='transaction_amounts'))
+
+class DemoPaymentRecord(Base):
+    __tablename__ = 'demo_payment_records'
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    transaction_id: Mapped[int] = mapped_column(
+        ForeignKey('app.transactions.id'), index=True
+    )
+    buyer_id: Mapped[str] = mapped_column(
+        Uuid(as_uuid=False), ForeignKey('app.profiles.id'), index=True
+    )
+    reference: Mapped[str] = mapped_column(String(80), unique=True)
+    method: Mapped[str] = mapped_column(String(20))
+    outcome: Mapped[str] = mapped_column(String(20))
+    price_cents: Mapped[int] = mapped_column(Integer)
+    support_cents: Mapped[int] = mapped_column(Integer)
+    fee_cents: Mapped[int] = mapped_column(Integer)
+    total_cents: Mapped[int] = mapped_column(Integer)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=now
+    )
+
+    __table_args__ = (
+        CheckConstraint(
+            "method in ('card','transfer')",
+            name='demo_payment_method'
+        ),
+        CheckConstraint(
+            "outcome in ('success','failed','cancelled')",
+            name='demo_payment_outcome'
+        ),
+        CheckConstraint(
+            'price_cents > 0 and support_cents >= 0 '
+            'and fee_cents >= 0 and total_cents = price_cents '
+            'and support_cents + fee_cents <= price_cents',
+            name='demo_payment_amounts'
+        ),
+        Index(
+            'one_successful_demo_payment',
+            'transaction_id',
+            unique=True,
+            postgresql_where=__import__('sqlalchemy').text(
+                "outcome = 'success'"
+            ),
+            sqlite_where=__import__('sqlalchemy').text(
+                "outcome = 'success'"
+            ),
+        ),
+    )
+
 class Delivery(Base):
     __tablename__ = 'deliveries'
     id: Mapped[int] = mapped_column(primary_key=True)

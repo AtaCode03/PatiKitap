@@ -20,9 +20,10 @@ from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from PIL import Image, UnidentifiedImageError
 from database import engine
 from models import (Base, Profile, Book, Request, Transaction, Delivery, SupportRecord,
-                    Favorite, Notification, Complaint, AuditLog, now)
+                    Favorite, Notification, Complaint, AuditLog, DemoPaymentRecord, now)
 from schemas import (BookInput, ProfileInput, RequestInput, RequestAction, DeliveryInput,
                      ComplaintInput, ResolutionInput, SupportInput, ModerateInput, UserStateInput)
+from demo_payments import DemoPaymentInput, simulate_demo_payment
 from auth import Identity, identity, SUPABASE_URL, SUPABASE_KEY
 
 @asynccontextmanager
@@ -394,6 +395,102 @@ def request_action(rid:int,data:RequestAction,session:DB,user:USER):
             audit(session,user,'transaction.created',tx)
     audit(session,user,f'request.{row.status}',row)
     return record(row)
+
+
+@app.post('/api/transactions/{tid}/demo-payment', status_code=201)
+def simulate_payment_endpoint(
+    tid: int,
+    data: DemoPaymentInput,
+    session: DB,
+    user: USER
+):
+    tx = get(session, Transaction, tid)
+    session.refresh(tx, with_for_update=True)
+
+    # Yetki ve satış koşulları her istekte backend tarafından doğrulanır.
+    result = simulate_demo_payment(tx, user.id, data)
+
+    previous = session.scalar(
+        select(DemoPaymentRecord.id)
+        .where(
+            DemoPaymentRecord.transaction_id == tid,
+            DemoPaymentRecord.outcome == 'success'
+        )
+        .limit(1)
+    )
+
+    if previous is not None:
+        raise HTTPException(
+            409,
+            'Bu satış için başarılı bir demo ödeme zaten mevcut.'
+        )
+
+    payment = DemoPaymentRecord(
+        transaction_id=tid,
+        buyer_id=user.id,
+        reference=result['reference'],
+        method=result['method'],
+        outcome=result['outcome'],
+        price_cents=result['price_cents'],
+        support_cents=result['support_cents'],
+        fee_cents=result['fee_cents'],
+        total_cents=result['total_cents'],
+    )
+
+    session.add(payment)
+    session.flush()
+    audit(session, user, 'demo_payment.created', payment, data.outcome)
+
+    return {
+        **record(payment),
+        'mode': 'simulation',
+        'real_payment': False,
+    }
+
+
+@app.get('/api/me/demo-payments')
+def my_demo_payments(
+    session: DB,
+    user: USER,
+    offset: int = Query(0, ge=0),
+    limit: int = Query(100, ge=1, le=200),
+):
+    rows = session.scalars(
+        select(DemoPaymentRecord)
+        .where(DemoPaymentRecord.buyer_id == user.id)
+        .order_by(DemoPaymentRecord.id.desc())
+        .offset(offset)
+        .limit(limit)
+    ).all()
+
+    return [
+        {
+            **record(payment),
+            'mode': 'simulation',
+            'real_payment': False,
+        }
+        for payment in rows
+    ]
+
+
+@app.get('/api/demo-payments/{payment_id}')
+def demo_payment_detail(
+    payment_id: int,
+    session: DB,
+    user: USER,
+):
+    payment = get(session, DemoPaymentRecord, payment_id)
+
+    if payment.buyer_id != user.id:
+        raise HTTPException(403, 'Bu demo dekontu sana ait değil.')
+
+    return {
+        **record(payment),
+        'mode': 'simulation',
+        'real_payment': False,
+    }
+
+
 @app.get('/api/me/transactions')
 def transactions(session:DB,user:USER, offset:int=Query(0,ge=0), limit:int=Query(100,ge=1,le=200)):
     rows=session.execute(select(Transaction,Book.title).join(Book,Book.id==Transaction.book_id).where(or_(Transaction.owner_id==user.id,Transaction.requester_id==user.id)).order_by(Transaction.id.desc()).offset(offset).limit(limit)).all()
