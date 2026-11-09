@@ -70,7 +70,7 @@ function Receipt({payment, bookTitle}) {
   </div>;
 }
 
-export default function DemoPaymentHistory({api, transaction, userId}) {
+export default function DemoPaymentHistory({api, transaction, userId, onPaymentRecorded}) {
   const [payments, setPayments] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -142,7 +142,7 @@ export default function DemoPaymentHistory({api, transaction, userId}) {
         transaction={transaction}
         userId={userId}
         api={api}
-        onPaymentRecorded={refresh}
+        onPaymentRecorded={async () => { await refresh(); await onPaymentRecorded?.(); }}
       />
     }
   </section>;

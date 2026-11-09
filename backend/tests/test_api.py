@@ -62,6 +62,18 @@ def accept(client,rid,owner=A):
     assert r.status_code==200,r.text
     return client.get('/api/me/transactions').json()[0]
 
+def pay_demo(client, tx, buyer=B):
+    as_user(buyer)
+    response = client.post(
+        f'/api/transactions/{tx["id"]}/demo-payment',
+        json={'method': 'card', 'outcome': 'success'}
+    )
+    assert response.status_code == 201, response.text
+    assert response.json()['real_payment'] is False
+    as_user(tx['owner_id'])
+    return response.json()
+
+
 def test_auth_and_ownership(client):
     assert client.post('/api/books',json={}).status_code==401
     assert client.get('/api/admin/overview').status_code==401
@@ -77,6 +89,8 @@ def test_sale_requires_both_confirmations_and_records_support_once(client):
     assert tx['price_cents']==10000 and tx['support_cents']==2000 and tx['fee_cents']==0
     assert client.post(f'/api/transactions/{tx["id"]}/confirm').status_code==409
     d=tx['deliveries'][0]
+    assert client.patch(f'/api/deliveries/{d["id"]}',json={'meeting_point':'Kampüs kütüphanesi'}).status_code==409
+    pay_demo(client, tx)
     assert client.patch(f'/api/deliveries/{d["id"]}',json={'meeting_point':'Kampüs kütüphanesi'}).status_code==200
     assert client.post(f'/api/transactions/{tx["id"]}/confirm').json()['status']=='in_delivery'
     as_user(B)
@@ -138,6 +152,7 @@ def test_exchange_owns_both_books_and_requires_two_deliveries(client):
 def test_cargo_validation_and_dispute_resolution(client):
     b=book(client,'Satış');r=request(client,b['id'],method='cargo');tx=accept(client,r['id'])
     d=tx['deliveries'][0]
+    pay_demo(client, tx)
     assert client.patch(f'/api/deliveries/{d["id"]}',json={}).status_code==422
     assert client.patch(f'/api/deliveries/{d["id"]}',json={'carrier':'Test Kargo','tracking_number':'123','cost_cents':2000}).status_code==200
     assert client.post(f'/api/transactions/{tx["id"]}/cancel').status_code==409
@@ -189,6 +204,7 @@ def test_admin_cancellation_and_support_document_validation(client):
 
 def test_support_is_simulation_and_only_admin_can_document(client):
     b=book(client,'Satış');r=request(client,b['id']);tx=accept(client,r['id'])
+    pay_demo(client, tx)
     client.patch(f'/api/deliveries/{tx["deliveries"][0]["id"]}',json={'meeting_point':'Teslim noktası'})
     client.post(f'/api/transactions/{tx["id"]}/confirm');as_user(B);client.post(f'/api/transactions/{tx["id"]}/confirm')
     sid=client.get('/api/support').json()[0]['id']

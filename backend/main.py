@@ -497,13 +497,53 @@ def transactions(session:DB,user:USER, offset:int=Query(0,ge=0), limit:int=Query
     deliveries={t.id:[] for t,_ in rows}
     if deliveries:
         for d in session.scalars(select(Delivery).where(Delivery.transaction_id.in_(deliveries))):deliveries[d.transaction_id].append(record(d))
-    return [{**record(t),'book_title':title,'deliveries':deliveries[t.id]} for t,title in rows]
+    successful_payment_ids = set()
+    sale_ids = [t.id for t, _ in rows if t.kind == 'Satış']
+
+    if sale_ids:
+        successful_payment_ids = set(
+            session.scalars(
+                select(DemoPaymentRecord.transaction_id)
+                .where(
+                    DemoPaymentRecord.transaction_id.in_(sale_ids),
+                    DemoPaymentRecord.outcome == 'success'
+                )
+            ).all()
+        )
+
+    return [
+        {
+            **record(t),
+            'book_title': title,
+            'deliveries': deliveries[t.id],
+            'demo_payment_status': (
+                'success' if t.id in successful_payment_ids else 'pending'
+            ) if t.kind == 'Satış' else None,
+        }
+        for t, title in rows
+    ]
 
 @app.patch('/api/deliveries/{did}')
 def dispatch(did:int,data:DeliveryInput,session:DB,user:USER):
     delivery=get(session,Delivery,did);tx,_=lock_tx(session,delivery.transaction_id);session.refresh(delivery)
     if delivery.sender_id!=user.id: raise HTTPException(403,'Yalnızca gönderen teslimat bilgisi girebilir.')
     if tx.status not in ('accepted','in_delivery') or delivery.status not in ('pending','dispatched'): raise HTTPException(409,'Teslimat bu durumda güncellenemez.')
+
+    # Satislarda teslimat icin basarili demo odeme zorunludur.
+    if tx.kind == 'Satış':
+        successful_payment = session.scalar(
+            select(DemoPaymentRecord.id)
+            .where(
+                DemoPaymentRecord.transaction_id == tx.id,
+                DemoPaymentRecord.outcome == 'success'
+            )
+            .limit(1)
+        )
+        if successful_payment is None:
+            raise HTTPException(
+                409,
+                'Teslimat baslatilmadan once demo odeme tamamlanmali.'
+            )
     if delivery.method=='cargo' and (not data.tracking_number or not data.carrier): raise HTTPException(422,'Kargo firması ve takip numarası gerekli.')
     if delivery.method!='cargo' and not data.meeting_point: raise HTTPException(422,'Buluşma veya teslim noktası gerekli.')
     for k,v in data.model_dump().items(): setattr(delivery,k,v)
@@ -516,6 +556,24 @@ def confirm(tid:int,session:DB,user:USER):
     tx,books=lock_tx(session,tid);participant(tx,user)
     if tx.status=='completed': return record(tx)
     if tx.status!='in_delivery': raise HTTPException(409,'Önce teslimat bilgileri girilmeli; ihtilaflı işlem onaylanamaz.')
+
+    # Satış işlemi başarılı demo ödeme olmadan tamamlanamaz.
+    if tx.kind == 'Satış':
+        successful_payment = session.scalar(
+            select(DemoPaymentRecord.id)
+            .where(
+                DemoPaymentRecord.transaction_id == tx.id,
+                DemoPaymentRecord.buyer_id == tx.requester_id,
+                DemoPaymentRecord.outcome == 'success'
+            )
+            .limit(1)
+        )
+        if successful_payment is None:
+            raise HTTPException(
+                409,
+                'Satış onaylanmadan önce başarılı demo ödeme gerekli.'
+            )
+
     deliveries=session.scalars(select(Delivery).where(Delivery.transaction_id==tx.id)).all()
     if not deliveries or any(d.status=='pending' for d in deliveries): raise HTTPException(409,'Önce tüm teslimatlar hazırlanmalı.')
     if user.id==tx.owner_id: tx.owner_confirmed=True
