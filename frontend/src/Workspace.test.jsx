@@ -105,3 +105,90 @@ test('ödeme durumu bilinmiyorsa satış teslimatı kapalı kalır', () => {
     name: 'Teslimat bilgisi gir'
   })).not.toBeInTheDocument();
 });
+
+test('işlemler sekmesinde 15 saniyede bir sessiz yenileme yapılır', () => {
+  vi.useFakeTimers();
+  try {
+    const refreshTransactions = vi.fn();
+    const api = vi.fn();
+    api.list = vi.fn().mockResolvedValue([]);
+
+    render(
+      <Account
+        api={api}
+        me={{id: sellerId, display_name: 'Test Satıcı'}}
+        own={[]}
+        requests={[]}
+        transactions={[]}
+        notifications={[]}
+        complaints={[]}
+        busy={false}
+        run={vi.fn()}
+        setModal={vi.fn()}
+        done={vi.fn()}
+        refreshTransactions={refreshTransactions}
+      />
+    );
+
+    vi.advanceTimersByTime(30000);
+    expect(refreshTransactions).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole('button', {name: 'İşlemler'}));
+    vi.advanceTimersByTime(15000);
+
+    expect(refreshTransactions).toHaveBeenCalledTimes(1);
+
+    vi.advanceTimersByTime(15000);
+    expect(refreshTransactions).toHaveBeenCalledTimes(2);
+
+    fireEvent.click(screen.getByRole('button', {name: 'Talepler'}));
+    vi.advanceTimersByTime(30000);
+
+    expect(refreshTransactions).toHaveBeenCalledTimes(2);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+test('gizli tarayıcı sekmesinde işlem yenileme isteği gönderilmez', () => {
+  vi.useFakeTimers();
+  const original = Object.getOwnPropertyDescriptor(document, 'visibilityState');
+
+  try {
+    Object.defineProperty(document, 'visibilityState', {
+      configurable: true,
+      value: 'hidden'
+    });
+
+    const refreshTransactions = vi.fn();
+    const api = vi.fn();
+    api.list = vi.fn().mockResolvedValue([]);
+
+    render(
+      <Account
+        api={api}
+        me={{id: sellerId, display_name: 'Test Satıcı'}}
+        own={[]}
+        requests={[]}
+        transactions={[]}
+        notifications={[]}
+        complaints={[]}
+        busy={false}
+        run={vi.fn()}
+        setModal={vi.fn()}
+        done={vi.fn()}
+        refreshTransactions={refreshTransactions}
+      />
+    );
+
+    fireEvent.click(screen.getByRole('button', {name: 'İşlemler'}));
+    vi.advanceTimersByTime(45000);
+
+    expect(refreshTransactions).not.toHaveBeenCalled();
+  } finally {
+    if (original) {
+      Object.defineProperty(document, 'visibilityState', original);
+    }
+    vi.useRealTimers();
+  }
+});

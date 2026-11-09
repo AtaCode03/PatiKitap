@@ -108,11 +108,14 @@ test('ödeme kaydedildikten sonra geçmiş yenilenir ve checkout kapanır', asyn
     .mockResolvedValueOnce([])
     .mockResolvedValueOnce([payment]);
 
+  const onPaymentRecorded = vi.fn().mockResolvedValue(undefined);
+
   render(
     <DemoPaymentHistory
       api={api}
       transaction={transaction}
       userId={buyerId}
+      onPaymentRecorded={onPaymentRecorded}
     />
   );
 
@@ -144,4 +147,8 @@ test('ödeme kaydedildikten sonra geçmiş yenilenir ve checkout kapanır', asyn
 
   expect(screen.getByText(/Aynı işlem için yeniden başarılı ödeme oluşturulamaz/))
     .toBeInTheDocument();
+
+  await waitFor(() => {
+    expect(onPaymentRecorded).toHaveBeenCalledTimes(1);
+  });
 });

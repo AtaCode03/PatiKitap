@@ -1,8 +1,17 @@
-import React,{useState} from 'react';
+import React,{useEffect,useState} from 'react';
 import DemoPaymentHistory from './DemoPaymentHistory.jsx';
 import {money,stamp,labels,Status,ProfileForm} from './forms';
-export function Account({api,me,own,requests,transactions,notifications,complaints,favorites=[],onUnfavorite,busy,run,setModal,done}){
+export function Account({api,me,own,requests,transactions,notifications,complaints,favorites=[],onUnfavorite,busy,run,setModal,done,refreshTransactions}){
  const [tab,setTab]=useState('requests');const unread=notifications.filter(n=>!n.read_at).length;
+  useEffect(() => {
+    if (tab !== 'transactions' || !refreshTransactions) return;
+    const timer = setInterval(() => {
+      if (document.visibilityState === 'visible') {
+        refreshTransactions();
+      }
+    }, 15000);
+    return () => clearInterval(timer);
+  }, [tab, refreshTransactions]);
  return <section className="workspace"><div className="eyebrow">PAYLAŞIM ALANIN</div><h1 className="page-title">Merhaba, {me?.display_name||'kitapsever'}.</h1><div className="workspace-tabs">{[['requests','Talepler'],['transactions','İşlemler'],['favorites',`Favoriler (${favorites.length})`],['books','İlanlarım'],['notifications',`Bildirimler (${unread})`],['complaints','Şikâyetlerim'],['profile','Profil']].map(([k,l])=><button key={k} className={tab===k?'selected':''} onClick={()=>setTab(k)}>{l}</button>)}</div>{!me?<p className="empty">Hesap bilgileri yükleniyor.</p>:<>
  {tab==='requests'&&<><h2>Gelen ve gönderdiğin talepler</h2>{requests.length?requests.map(r=><article className="row-card" key={r.id}><div><small>{r.owner_id===me.id?'Gelen talep':'Gönderdiğin talep'} · #{r.id}</small><h3>{r.book_title}</h3><Status value={r.status}/>{r.offered_title&&<p>Takas teklifi: {r.offered_title}</p>}<p>{r.message||'Not eklenmemiş.'}</p><small>{labels[r.delivery_method]} · Kargo: {labels[r.shipping_payer]} · {stamp(r.created_at)}</small></div>{r.status==='pending'&&<div className="row-actions">{r.owner_id===me.id?<><button disabled={busy} className="primary" onClick={()=>run(`/requests/${r.id}/action`,{action:'accept'})}>Kabul et</button><button disabled={busy} className="secondary" onClick={()=>run(`/requests/${r.id}/action`,{action:'reject'})}>Reddet</button></>:<button disabled={busy} className="secondary" onClick={()=>run(`/requests/${r.id}/action`,{action:'cancel'})}>Talebi geri çek</button>}</div>}</article>):<p className="empty">Henüz talep yok. Katalogdaki kullanıcı ilanlarından birini talep edebilirsin.</p>}</>}
  {tab==='transactions'&&<><h2>Paylaşım ve teslimat takibi</h2>{transactions.length?transactions.map(t=><article className="transaction-card" key={t.id}><div className="card-heading"><h3>#{t.id} · {t.book_title}</h3><Status value={t.status}/></div><p>{t.kind} · {stamp(t.created_at)}</p>{t.kind==='Satış'&&<div className="financial"><span>Örnek satış <b>{money(t.price_cents/100)}</b></span><span>İşlem gideri <b>{money(t.fee_cents/100)}</b></span><span>Örnek destek <b>{money(t.support_cents/100)}</b></span><span>Kalan tutar <b>{money((t.price_cents-t.support_cents-t.fee_cents)/100)}</b></span></div>}<DemoPaymentHistory transaction={t} userId={me.id} api={api} onPaymentRecorded={done}/>{t.deliveries.map(d=><div className="delivery-box" key={d.id}><div><b>{d.sender_id===me.id?'Göndereceğin kitap':'Sana gelecek kitap'}</b> · {labels[d.method]} <Status value={d.status}/><p>{d.method==='cargo'?`${d.carrier||'Firma bekleniyor'} · ${d.tracking_number||'Takip numarası bekleniyor'}`:d.meeting_point||'Teslim noktası bekleniyor'}</p>{d.method==='cargo'&&<small>Kargo {money(d.cost_cents/100)} · Ödeyen: {labels[d.shipping_payer]}</small>}</div>{d.sender_id===me.id&&['accepted','in_delivery'].includes(t.status)&&d.status!=='delivered'&&(
