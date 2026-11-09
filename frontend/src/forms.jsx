@@ -17,7 +17,7 @@ export function AuthForm({client,done,initialMode='login',onModeChange}){
  async function submit(e){e.preventDefault();setBusy(true);setError('');setMessage('');try{
   let result;
   if(mode==='signup')result=await client.auth.signUp({email,password,options:{data:{display_name:name},emailRedirectTo:window.location.origin}});
-  else if(mode==='reset')result=await client.auth.resetPasswordForEmail(email,{redirectTo:window.location.origin});
+  else if(mode==='reset')result=await client.auth.resetPasswordForEmail(email,{redirectTo:`${window.location.origin}/auth/reset-password`});
   else result=await client.auth.signInWithPassword({email,password});
   if(result.error)throw result.error;
   if(mode==='signup'&&!result.data.session)setMessage('Kayıt isteği alındı. Hesabını e-posta bağlantısıyla doğrulayıp giriş yap.');
