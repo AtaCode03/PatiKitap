@@ -24,13 +24,40 @@ export function App({client}){
  async function refresh(){const gen=++generation.current;++transactionRefreshId.current;setError('');try{
  const {data:{session:current}}=await client.auth.getSession();
  if(gen!==generation.current)return;
- let m=null;
- if(current){m=await api('/me');if(gen!==generation.current)return;setMe(m);if(!m.is_admin){setAdminData(null);/* API authorization remains authoritative. */}}
- const [b,i,s]=await Promise.all([api.list('/books'),api('/impact'),api.list('/support')]);if(gen!==generation.current)return;setBooks(b);setImpact(i);setSupport(s);
- if(current){const [o,r,t,n,c,f,fb]=await Promise.all([api.list('/me/books'),api.list('/me/requests'),api.list('/me/transactions'),api.list('/me/notifications'),api.list('/me/complaints'),api('/me/favorites'),api('/me/favorite-books')]);if(gen!==generation.current)return;setOwn(o);setRequests(r);setTransactions(t);setNotifications(n);setComplaints(c);setFavorites(f);setFavoriteBooks(fb);
- if(m.is_admin){const [overview,cs,bs,ss,as,us]=await Promise.all([api('/admin/overview'),api.list('/admin/complaints'),api.list('/admin/books'),api.list('/admin/support'),api.list('/admin/audit'),api.list('/admin/users')]);if(gen!==generation.current)return;setAdminData({overview,complaints:cs,books:bs,support:ss,audit:as,users:us})}
- const paths=[...new Set([...b,...o].filter(x=>x.image_url?.startsWith('book-media/')).map(x=>x.image_url.slice(11)))];if(paths.length){const {data}=await client.storage.from('book-media').createSignedUrls(paths,300);if(gen===generation.current)setSigned(Object.fromEntries((data||[]).filter(x=>x.signedUrl).map(x=>['book-media/'+x.path,x.signedUrl])))}}
- else{setMe(null);setOwn([]);setRequests([]);setTransactions([]);setNotifications([]);setComplaints([]);setFavorites([]);setFavoriteBooks([]);setAdminData(null);setSigned({})}
+ const active=()=>gen===generation.current;
+ const report=e=>{if(active())setError(e.message)};
+ async function signBooks(items){
+  if(!current||!active())return;
+  const paths=[...new Set(items.filter(x=>x.image_url?.startsWith('book-media/')).map(x=>x.image_url.slice(11)))];
+  if(!paths.length)return;
+  const {data,error}=await client.storage.from('book-media').createSignedUrls(paths,300);
+  if(error)throw error;
+  if(active())setSigned(previous=>({...previous,...Object.fromEntries((data||[]).filter(x=>x.signedUrl).map(x=>['book-media/'+x.path,x.signedUrl]))}));
+ }
+ // Render the catalogue as soon as it arrives, independently of account/report requests.
+ const catalogue=api.list('/books').then(async b=>{
+  if(!active())return;
+  setBooks(b);setLoading(false);
+  await signBooks(b);
+ }).catch(report).finally(()=>{if(active())setLoading(false)});
+ const reports=[
+  api('/impact').then(i=>{if(active())setImpact(i)}).catch(report),
+  api.list('/support').then(s=>{if(active())setSupport(s)}).catch(report),
+ ];
+ const account=(async()=>{
+  if(!current){setMe(null);setOwn([]);setRequests([]);setTransactions([]);setNotifications([]);setComplaints([]);setFavorites([]);setFavoriteBooks([]);setAdminData(null);setSigned({});return}
+  const m=await api('/me');if(!active())return;setMe(m);
+  if(!m.is_admin)setAdminData(null);
+  const personal=[
+   api.list('/me/books').then(async o=>{if(active()){setOwn(o);await signBooks(o)}}),
+   ...[['/me/requests',setRequests],['/me/transactions',setTransactions],['/me/notifications',setNotifications],['/me/complaints',setComplaints]].map(([path,setter])=>api.list(path).then(items=>{if(active())setter(items)})),
+   api('/me/favorites').then(f=>{if(active())setFavorites(f)}),
+   api('/me/favorite-books').then(fb=>{if(active())setFavoriteBooks(fb)}),
+  ];
+  if(m.is_admin)personal.push(Promise.all([api('/admin/overview'),api.list('/admin/complaints'),api.list('/admin/books'),api.list('/admin/support'),api.list('/admin/audit'),api.list('/admin/users')]).then(([overview,cs,bs,ss,as,us])=>{if(active())setAdminData({overview,complaints:cs,books:bs,support:ss,audit:as,users:us})}));
+  await Promise.all(personal.map(task=>task.catch(report)));
+ })().catch(report);
+ await Promise.all([catalogue,...reports,account]);
  }catch(e){if(gen===generation.current)setError(e.message)}finally{if(gen===generation.current)setLoading(false)}}
  useEffect(()=>{let alive=true;client.auth.getSession().then(({data})=>{if(alive){setSession(data.session);setAuthReady(true);if(client.passwordRecovery&&data.session)navigate('/auth/reset-password',{replace:true})}});const {data:{subscription}}=client.auth.onAuthStateChange((event,s)=>{setSession(s);if(!s){if(event==='SIGNED_OUT')generation.current++;setMe(null);setOwn([]);setRequests([]);setTransactions([]);setNotifications([]);setComplaints([]);setFavorites([]);setFavoriteBooks([]);setAdminData(null);setSigned({})}if(event==='PASSWORD_RECOVERY')navigate('/auth/reset-password',{replace:true})});return()=>{alive=false;subscription.unsubscribe();generation.current++}},[]);
  useEffect(()=>{if(authReady)refresh()},[authReady,session?.user?.id,session?.access_token]);

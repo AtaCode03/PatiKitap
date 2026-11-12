@@ -623,11 +623,15 @@ def my_complaints(session:DB,user:USER, offset:int=Query(0,ge=0), limit:int=Quer
     return [record(r) for r in session.scalars(select(Complaint).where(Complaint.reporter_id==user.id).order_by(Complaint.id.desc()).offset(offset).limit(limit))]
 
 def impact_data(session):
-    return {'mode':'simulation','support_rate':0.2,'completed_transactions':session.scalar(select(func.count()).select_from(Transaction).where(Transaction.status=='completed')),
-        'active_books':session.scalar(select(func.count()).select_from(Book).where(Book.status=='active',Book.is_demo==False)),
-        'demo_books':session.scalar(select(func.count()).select_from(Book).where(Book.is_demo==True)),
-        'simulated_support_cents':session.scalar(select(func.coalesce(func.sum(SupportRecord.amount_cents),0))), 'real_support_cents':0,
-        'participants':session.scalar(select(func.count()).select_from(Profile))}
+    # Independent aggregates in one round trip; joining these tables would inflate counts.
+    totals = session.execute(select(
+        select(func.count()).select_from(Transaction).where(Transaction.status=='completed').scalar_subquery().label('completed_transactions'),
+        select(func.count()).select_from(Book).where(Book.status=='active',Book.is_demo==False).scalar_subquery().label('active_books'),
+        select(func.count()).select_from(Book).where(Book.is_demo==True).scalar_subquery().label('demo_books'),
+        select(func.coalesce(func.sum(SupportRecord.amount_cents),0)).scalar_subquery().label('simulated_support_cents'),
+        select(func.count()).select_from(Profile).scalar_subquery().label('participants'),
+    )).mappings().one()
+    return {'mode':'simulation','support_rate':0.2,**totals,'real_support_cents':0}
 @app.get('/api/impact')
 def impact(session:DB): return impact_data(session)
 @app.get('/api/support')
@@ -706,8 +710,12 @@ def set_user_state(uid:UUID,data:UserStateInput,session:DB,user:ADMIN):
 
 @app.get('/api/ready')
 def readiness(session:DB):
-    for table in Base.metadata.sorted_tables:
-        session.execute(select(table).limit(0))
+    # Validate every mapped table/column and SELECT permission without reading rows.
+    # Render calls this frequently: use one round trip instead of one per table.
+    session.execute(select(*[
+        select(func.count()).select_from(select(table).limit(0).subquery()).scalar_subquery().label(table.name)
+        for table in Base.metadata.sorted_tables
+    ])).one()
     return {'status':'ready'}
 
 # A built React application can be served from the same origin in production.
