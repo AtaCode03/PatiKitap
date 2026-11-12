@@ -20,8 +20,8 @@ export function AuthForm({client,done,initialMode='login',onModeChange}){
   else if(mode==='reset')result=await client.auth.resetPasswordForEmail(email,{redirectTo:`${window.location.origin}/auth/reset-password`});
   else result=await client.auth.signInWithPassword({email,password});
   if(result.error)throw result.error;
-  if(mode==='signup'&&!result.data.session)setMessage('Kayıt isteği alındı. Hesabını e-posta bağlantısıyla doğrulayıp giriş yap.');
-  else if(mode==='reset')setMessage('Hesap kayıtlıysa parola yenileme bağlantısı gönderilecek.');
+  if(mode==='signup'&&!result.data.session)setMessage('Kayıt isteği alındı. Bu sekmeyi açık tut; e-postadaki doğrulama bağlantısını bu sekmenin adres çubuğunda aç.');
+  else if(mode==='reset')setMessage('Hesap kayıtlıysa parola yenileme bağlantısı gönderilecek. Bu sekmeyi açık tut; bağlantıyı bu sekmenin adres çubuğunda aç.');
   else done();
  }catch(e){setError(e.message.includes('Invalid login')?'E-posta veya parola hatalı.':e.message)}finally{setBusy(false)}}
  return <><div className="tabs">{[['login','Giriş'],['signup','Kayıt ol'],['reset','Parolamı unuttum']].map(([v,t])=><button key={v} type="button" className={mode===v?'selected':''} onClick={()=>{onModeChange?onModeChange(v):setMode(v);setError('');setMessage('')}}>{t}</button>)}</div><form onSubmit={submit} className="stack-form">{mode==='signup'&&<Field label="Görünen ad"><input required minLength={2} maxLength={80} value={name} onChange={e=>setName(e.target.value)}/></Field>}<Field label="E-posta"><input type="email" required autoComplete="email" value={email} onChange={e=>setEmail(e.target.value)}/></Field>{mode!=='reset'&&<Field label="Parola"><input type="password" required minLength={mode==='signup'?8:1} autoComplete={mode==='signup'?'new-password':'current-password'} value={password} onChange={e=>setPassword(e.target.value)}/></Field>}{error&&<p className="error" role="alert">{error}</p>}{message&&<p className="success" role="status">{message}</p>}<button className="primary" disabled={busy}>{busy?'Bekleyin…':mode==='signup'?'Hesap oluştur':mode==='reset'?'Yenileme bağlantısı gönder':'Giriş yap'}</button></form></>

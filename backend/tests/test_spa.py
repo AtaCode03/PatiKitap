@@ -10,7 +10,7 @@ def test_history_fallback_preserves_api_and_asset_errors(tmp_path):
     def health(): return {'ok':True}
     app.mount('/',SPAStaticFiles(directory=tmp_path,html=True))
     with TestClient(app) as client:
-        for path in ['/','/account','/admin','/impact','/auth/login','/auth/register','/auth/forgot-password','/auth/reset-password']:
+        for path in ['/','/books','/books/new','/account','/admin','/impact','/auth/login','/auth/register','/auth/forgot-password','/auth/reset-password']:
             result=client.get(path)
             assert result.status_code==200
             assert 'text/html' in result.headers['content-type']

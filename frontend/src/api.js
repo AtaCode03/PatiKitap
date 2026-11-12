@@ -1,9 +1,10 @@
 import {createClient} from '@supabase/supabase-js';
+import {sessionAuthOptions} from './sessionAuth.js';
 export async function bootstrap(){
  const r=await fetch('/api/config',{signal:AbortSignal.timeout(20000)});
  if(!r.ok)throw Error('API sunucusuna ulaşılamıyor. Sunucuyu başlatıp sayfayı yenile.');
  const config=await r.json();
- const client=createClient(config.supabase_url,config.supabase_publishable_key,{auth:{flowType:'pkce'}});
+ const client=createClient(config.supabase_url,config.supabase_publishable_key,{auth:sessionAuthOptions(config.supabase_url)});
  // Subscribe before initialization completes so recovery events cannot precede React.
  client.auth.onAuthStateChange(event=>{if(event==='PASSWORD_RECOVERY')client.passwordRecovery=true});
  return client;
