@@ -23,7 +23,7 @@ Supabase → Authentication → URL Configuration:
 
 Kayıt formu `emailRedirectTo: window.location.origin` gönderir; `/auth/register` kayıt sayfasıdır, doğrulama dönüş yolu kök adrestir. Canlı origin izin listesinde yoksa veya e-posta şablonu Site URL kullanıyorsa localhost’a dönüş görülebilir. Bu Dashboard ayarları kaynak kodu dağıtımıyla otomatik güncellenmez; panelde ayrıca kaydedilmelidir.
 
-Kayıt ve parola yenileme e-postalarını canlı adresten yeniden iste. Eski localhost bağlantıları canlı adresi doğrulamaz. Sekme bazlı PKCE nedeniyle e-postadaki bağlantıyı işlemi başlatan açık sekmenin adres çubuğunda aç.
+Kayıt ve parola yenileme e-postalarını canlı adresten yeniden iste. Eski localhost bağlantıları canlı adresi doğrulamaz. E-postadaki bağlantı aynı tarayıcı profilinde yeni sekmede açılabilir; isteği başlatan sekmenin açık kalması gerekmez. En son gelen bağlantıyı kullan. Farklı tarayıcı/cihaz veya gizli profil için o ortamdan yeni bağlantı iste.
 
 ## Yayın doğrulaması
 

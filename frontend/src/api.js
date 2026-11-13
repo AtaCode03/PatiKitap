@@ -4,9 +4,18 @@ export async function bootstrap(){
  const r=await fetch('/api/config',{signal:AbortSignal.timeout(20000)});
  if(!r.ok)throw Error('API sunucusuna ulaşılamıyor. Sunucuyu başlatıp sayfayı yenile.');
  const config=await r.json();
- const client=createClient(config.supabase_url,config.supabase_publishable_key,{auth:sessionAuthOptions(config.supabase_url)});
+ const auth=sessionAuthOptions(config.supabase_url);
+ const recoveryCallback=window.location.pathname==='/auth/reset-password' && new URLSearchParams(window.location.search).has('code');
+ let recoveryProof=false;
+ if(recoveryCallback){try{recoveryProof=JSON.parse(auth.storage.getItem(auth.storageKey+'-code-verifier')||'null')?.endsWith('/PASSWORD_RECOVERY')===true}catch{}}
+ const client=createClient(config.supabase_url,config.supabase_publishable_key,{auth});
  // Subscribe before initialization completes so recovery events cannot precede React.
  client.auth.onAuthStateChange(event=>{if(event==='PASSWORD_RECOVERY')client.passwordRecovery=true});
+ const {error:callbackError}=await client.auth.initialize();
+ const session=recoveryCallback?(await client.auth.getSession()).data.session:null;
+ client.authCallbackError=Boolean(callbackError || (recoveryCallback && (!recoveryProof || !session)));
+ // This SDK version emits SIGNED_IN for PKCE recovery; validate the proof and session explicitly.
+ if(recoveryCallback&&!client.authCallbackError)client.passwordRecovery=true;
  return client;
 }
 export function makeApi(client){
