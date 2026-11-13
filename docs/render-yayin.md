@@ -17,9 +17,11 @@ Hazırlanan yapı: tek Docker web servisi React arayüzünü ve FastAPI'yi aynı
 
 Supabase → Authentication → URL Configuration:
 
-- Site URL: Render'ın verdiği tam HTTPS adresi.
-- Redirect URLs: aynı adresin kökü ve `/auth/reset-password` yolu.
+- Site URL: `https://patikitap-qcnx.onrender.com`.
+- Redirect URLs (tam eşleşme): `https://patikitap-qcnx.onrender.com`, `https://patikitap-qcnx.onrender.com/` ve `https://patikitap-qcnx.onrender.com/auth/reset-password`.
 - Yerel test devam edecekse mevcut `http://127.0.0.1:5173` izinlerini koru.
+
+Kayıt formu `emailRedirectTo: window.location.origin` gönderir; `/auth/register` kayıt sayfasıdır, doğrulama dönüş yolu kök adrestir. Canlı origin izin listesinde yoksa veya e-posta şablonu Site URL kullanıyorsa localhost’a dönüş görülebilir. Bu Dashboard ayarları kaynak kodu dağıtımıyla otomatik güncellenmez; panelde ayrıca kaydedilmelidir.
 
 Kayıt ve parola yenileme e-postalarını canlı adresten yeniden iste. Eski localhost bağlantıları canlı adresi doğrulamaz. Sekme bazlı PKCE nedeniyle e-postadaki bağlantıyı işlemi başlatan açık sekmenin adres çubuğunda aç.
 

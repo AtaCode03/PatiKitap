@@ -1,0 +1,19 @@
+/* Hero contrast stays strong with or without motion. */
+.hero h1 { color: #183c40; }
+.hero h1 em { color: #005f86; }
+.hero .eyebrow { color: #456538; }
+.hero .eyebrow > span { background: #56823f; }
+.hero-copy > p { color: #4b6057; }
+.hero .text-button { color: #28534b; }
+.hero .hero-disclaimer { background: #f6e7d0; color: #685034; border: 1px solid #e6cda7; }
+.hero-art { background: radial-gradient(ellipse at 35% 30%, #f8e3b9, #dce8cf 72%); }
+.hero .orbit { border-color: #8eaa77; }
+.hero .hero-cover { background: #205b60; border-left-color: #143f45; box-shadow: 10px 15px 25px #173e4033; }
+.hero .spine1 { background: #a8532d; color: #fff8e9; }
+.hero .spine2 { background: #e7be6d; color: #4d3b19; }
+.hero .spine3 { background: #4e6b3d; color: #fff8e9; }
+.hero .floating { border: 1px solid #d4dfca; box-shadow: 0 8px 30px #314c4920; }
+.hero .floating small { color: #526449; }
+.hero .round { background: #ffe3b4; color: #945719; }
+.hero .round-note { background: #f3c267; color: #473b21; }
+.hero .spark { color: #ad691f; }

@@ -9,6 +9,7 @@ import {money,stamp,Select,Status,Modal,AuthForm,PasswordForm,BookForm,RequestFo
 import {Account,Admin} from './Workspace';
 import './style.css';
 import './workspace.css';
+import './hero.css';
 import './animations.css';
 export function App({client}){
  const api=useRef(makeApi(client)).current;

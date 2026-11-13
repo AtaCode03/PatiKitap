@@ -61,7 +61,6 @@
       to { translate: 30px -60px; rotate: 8deg; scale: .92; }
     }
     @keyframes stack-drift { to { translate: -30px 40px; rotate: -3deg; } }
-    @keyframes copy-away   { to { opacity: .2; translate: -40px -20px; } }
     @keyframes art-away    { to { translate: 0 -60px; scale: .92; } }
 
     .hero-cover {
@@ -74,11 +73,7 @@
       animation-timeline: auto, scroll(root);
       animation-range: normal, 0 650px;
     }
-    .hero-copy {
-      animation: copy-away linear both;
-      animation-timeline: scroll(root);
-      animation-range: 0 550px;
-    }
+    /* Keep hero text fully readable at every scroll position. */
     .hero-art {
       animation: pop-in 1s .3s cubic-bezier(.2,.9,.3,1.2) both, art-away linear both;
       animation-timeline: auto, scroll(root);
