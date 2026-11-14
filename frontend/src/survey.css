@@ -1,0 +1,7 @@
+.survey-invite{display:flex;align-items:center;justify-content:space-between;gap:24px;margin:28px 0 48px;padding:28px 32px;background:#fff4e6;border:1px solid #f2d6b4;border-radius:18px}
+.survey-invite h2{margin:0;color:#183c40;font-size:clamp(20px,2.5vw,27px);line-height:1.3}
+.survey-invite p{margin:9px 0 0;color:#4b6057;font-size:15px;line-height:1.6}
+.survey-invite .survey-link{display:inline-flex;align-items:center;justify-content:center;gap:9px;flex-shrink:0;min-height:44px;padding:14px 22px;background:#005f86;color:#fff;text-decoration:none;font-weight:600;border-radius:11px}
+.survey-invite .survey-link:hover{background:#004b6a}
+.survey-invite .survey-link:focus-visible{outline:3px solid #005f86;outline-offset:4px}
+@media(max-width:640px){.survey-invite{align-items:stretch;flex-direction:column;gap:20px;padding:24px 20px;margin:20px 0 32px}.survey-invite .survey-link{width:100%;box-sizing:border-box}}
